@@ -17,7 +17,16 @@ final class WebhookTests: XCTestCase {
         let event = try ReferalliWebhook.constructEvent(rawBody: Data(body.utf8), headers: headers, secrets: [secret], now: now)
         XCTAssertEqual(event.topic, WebhookTopic.referralCreated)
         XCTAssertEqual(event.orgId, "org_1")
-        guard case .referralCreated = event.payload else { return XCTFail("payload is \(event.payload)") }
+        // The shared vector's data is partial (only partnerId), so it decodes to the unknown fallback.
+        guard case .unknown = event.payload else { return XCTFail("payload is \(event.payload)") }
+    }
+
+    func testCompletePayloadDecodesToItsTypedCase() throws {
+        let full = #"{"referralId":"ref_1","programId":"prg_1","partnerId":"ptr_1","customerRef":"cus_1","status":"pending","matchedVia":"link"}"#
+        let data = try JSONDecoder().decode(JSONValue.self, from: Data(full.utf8))
+        guard case .referralCreated = try WebhookPayload.decode(topic: "referral.created", data: data) else {
+            return XCTFail("a complete referral.created payload did not decode to .referralCreated")
+        }
     }
 
     func testRejectsTamperingStaleAndWrongSecrets() {
