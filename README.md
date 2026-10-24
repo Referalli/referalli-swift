@@ -5,7 +5,7 @@ The official Swift package for [Referalli](https://referalli.com): a typed async
 - One typed `async` method per API operation, with `Codable` structs for every model.
 - Retries with backoff, idempotency keys, timeouts, `AsyncThrowingStream` auto-paging and one error class per error code.
 - Webhook signature verification and typed webhook payloads.
-- Foundation only on Apple platforms (CryptoKit); `swift-crypto` on Linux. macOS 12, iOS 15, tvOS 15, watchOS 8.
+- Foundation only on Apple platforms (CryptoKit); `swift-crypto` on Linux. macOS 12, iOS 15, tvOS 15, watchOS 8, visionOS 1.
 
 Docs: <https://referalli.com/docs>.
 
