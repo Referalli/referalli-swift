@@ -882,6 +882,27 @@ public struct CommissionRule: Codable, Sendable, Equatable {
     }
 }
 
+public struct BillingFilter: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+    public var productIds: [String]?
+    public var priceIds: [String]?
+    public var skus: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+        case productIds = "productIds"
+        case priceIds = "priceIds"
+        case skus = "skus"
+    }
+
+    public init(metadata: [String: String]? = nil, productIds: [String]? = nil, priceIds: [String]? = nil, skus: [String]? = nil) {
+        self.metadata = metadata
+        self.productIds = productIds
+        self.priceIds = priceIds
+        self.skus = skus
+    }
+}
+
 public struct ValueMapping: Codable, Sendable, Equatable {
     public var cash: String?
     public var creditApplied: String?
@@ -1156,6 +1177,8 @@ public struct BillingConnection: Codable, Sendable, Equatable {
     public var hasCredentials: Bool
     /// Where cash / credit / discount / cost live in this connection's payload; null uses the built-in extractor.
     public var valueMapping: ValueMapping?
+    /// Only matching events earn; the rest are recorded as ignored_by_filter. null takes every event.
+    public var filter: BillingFilter?
     public var rotation: BillingConnectionRotation
 
     enum CodingKeys: String, CodingKey {
@@ -1168,10 +1191,11 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case needsCredentials = "needsCredentials"
         case hasCredentials = "hasCredentials"
         case valueMapping = "valueMapping"
+        case filter = "filter"
         case rotation = "rotation"
     }
 
-    public init(id: String, provider: String, name: String, status: String, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, rotation: BillingConnectionRotation) {
+    public init(id: String, provider: String, name: String, status: String, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, rotation: BillingConnectionRotation) {
         self.id = id
         self.provider = provider
         self.name = name
@@ -1181,6 +1205,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         self.needsCredentials = needsCredentials
         self.hasCredentials = hasCredentials
         self.valueMapping = valueMapping
+        self.filter = filter
         self.rotation = rotation
     }
 }
@@ -1192,19 +1217,22 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
     public var webhookSecret: String
     /// Path to register with the provider.
     public var webhookUrl: String
+    public var filter: BillingFilter?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
         case provider = "provider"
         case webhookSecret = "webhookSecret"
         case webhookUrl = "webhookUrl"
+        case filter = "filter"
     }
 
-    public init(id: String, provider: String, webhookSecret: String, webhookUrl: String) {
+    public init(id: String, provider: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil) {
         self.id = id
         self.provider = provider
         self.webhookSecret = webhookSecret
         self.webhookUrl = webhookUrl
+        self.filter = filter
     }
 }
 
@@ -1222,6 +1250,13 @@ public struct BillingEvent: Codable, Sendable, Equatable {
     public var fees: Int
     public var currency: String
     public var occurredAt: String
+    public var connectionId: String?
+    public var productRef: String
+    /// ignored_by_filter: recorded, never processed (product filter or internal customer).
+    public var status: String
+    public var ignoredReason: String?
+    /// The productIds, priceIds and skus the event named.
+    public var catalog: [String: [String]]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -1234,9 +1269,14 @@ public struct BillingEvent: Codable, Sendable, Equatable {
         case fees = "fees"
         case currency = "currency"
         case occurredAt = "occurredAt"
+        case connectionId = "connectionId"
+        case productRef = "productRef"
+        case status = "status"
+        case ignoredReason = "ignoredReason"
+        case catalog = "catalog"
     }
 
-    public init(id: String, provider: String, type: String, customerRef: String, invoiceRef: String? = nil, amountGross: Int, tax: Int, fees: Int, currency: String, occurredAt: String) {
+    public init(id: String, provider: String, type: String, customerRef: String, invoiceRef: String? = nil, amountGross: Int, tax: Int, fees: Int, currency: String, occurredAt: String, connectionId: String? = nil, productRef: String, status: String, ignoredReason: String? = nil, catalog: [String: [String]]? = nil) {
         self.id = id
         self.provider = provider
         self.type = type
@@ -1247,6 +1287,107 @@ public struct BillingEvent: Codable, Sendable, Equatable {
         self.fees = fees
         self.currency = currency
         self.occurredAt = occurredAt
+        self.connectionId = connectionId
+        self.productRef = productRef
+        self.status = status
+        self.ignoredReason = ignoredReason
+        self.catalog = catalog
+    }
+}
+
+public struct InternalCustomer: Codable, Sendable, Equatable {
+    public var customerRef: String
+    public var note: String
+    public var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case note = "note"
+        case createdAt = "createdAt"
+    }
+
+    public init(customerRef: String, note: String, createdAt: String) {
+        self.customerRef = customerRef
+        self.note = note
+        self.createdAt = createdAt
+    }
+}
+
+public struct IdentityProviderSampleHookOption1: Codable, Sendable, Equatable {
+    public var language: String
+    public var filename: String
+    public var code: String
+
+    enum CodingKeys: String, CodingKey {
+        case language = "language"
+        case filename = "filename"
+        case code = "code"
+    }
+
+    public init(language: String, filename: String, code: String) {
+        self.language = language
+        self.filename = filename
+        self.code = code
+    }
+}
+
+public struct IdentityProviderMetadataPaths: Codable, Sendable, Equatable {
+    public var anonId: [String]
+    public var clickId: [String]
+    public var coupon: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case anonId = "anonId"
+        case clickId = "clickId"
+        case coupon = "coupon"
+    }
+
+    public init(anonId: [String], clickId: [String], coupon: [String]) {
+        self.anonId = anonId
+        self.clickId = clickId
+        self.coupon = coupon
+    }
+}
+
+public struct IdentityProvider: Codable, Sendable, Equatable {
+    public var id: String
+    public var label: String
+    public var mechanism: String
+    public var status: String
+    public var docsUrl: String
+    public var vendorDocsUrl: String
+    public var secretKind: String
+    public var secretIssuedBy: String
+    public var vendorSteps: [String]
+    public var sampleHook: IdentityProviderSampleHookOption1?
+    public var metadataPaths: IdentityProviderMetadataPaths
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case label = "label"
+        case mechanism = "mechanism"
+        case status = "status"
+        case docsUrl = "docsUrl"
+        case vendorDocsUrl = "vendorDocsUrl"
+        case secretKind = "secretKind"
+        case secretIssuedBy = "secretIssuedBy"
+        case vendorSteps = "vendorSteps"
+        case sampleHook = "sampleHook"
+        case metadataPaths = "metadataPaths"
+    }
+
+    public init(id: String, label: String, mechanism: String, status: String, docsUrl: String, vendorDocsUrl: String, secretKind: String, secretIssuedBy: String, vendorSteps: [String], sampleHook: IdentityProviderSampleHookOption1? = nil, metadataPaths: IdentityProviderMetadataPaths) {
+        self.id = id
+        self.label = label
+        self.mechanism = mechanism
+        self.status = status
+        self.docsUrl = docsUrl
+        self.vendorDocsUrl = vendorDocsUrl
+        self.secretKind = secretKind
+        self.secretIssuedBy = secretIssuedBy
+        self.vendorSteps = vendorSteps
+        self.sampleHook = sampleHook
+        self.metadataPaths = metadataPaths
     }
 }
 
@@ -1265,6 +1406,24 @@ public struct WebhookEndpointRotation: Codable, Sendable, Equatable {
     }
 }
 
+public struct WebhookEndpointLastFailureOption1: Codable, Sendable, Equatable {
+    public var statusCode: Int?
+    public var error: String?
+    public var at: String
+
+    enum CodingKeys: String, CodingKey {
+        case statusCode = "statusCode"
+        case error = "error"
+        case at = "at"
+    }
+
+    public init(statusCode: Int? = nil, error: String? = nil, at: String) {
+        self.statusCode = statusCode
+        self.error = error
+        self.at = at
+    }
+}
+
 public struct WebhookEndpoint: Codable, Sendable, Equatable {
     public var id: String
     public var url: String
@@ -1279,6 +1438,14 @@ public struct WebhookEndpoint: Codable, Sendable, Equatable {
     public var failingSince: String?
     public var disabledAt: String?
     public var disabledReason: String?
+    /// failing: the latest deliveries failed; alerts go out at 1 h and 24 h, and it is disabled at 72 h.
+    public var health: String
+    public var lastSuccessAt: String?
+    /// The most recent failed attempt: HTTP status (null: no response) and the error or start of the response body.
+    public var lastFailure: WebhookEndpointLastFailureOption1?
+    public var consecutiveFailures: Int
+    /// Emailed (with the org owner) when the endpoint starts failing.
+    public var alertContacts: [String]
     public var createdAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -1292,10 +1459,15 @@ public struct WebhookEndpoint: Codable, Sendable, Equatable {
         case failingSince = "failingSince"
         case disabledAt = "disabledAt"
         case disabledReason = "disabledReason"
+        case health = "health"
+        case lastSuccessAt = "lastSuccessAt"
+        case lastFailure = "lastFailure"
+        case consecutiveFailures = "consecutiveFailures"
+        case alertContacts = "alertContacts"
         case createdAt = "createdAt"
     }
 
-    public init(id: String, url: String, topics: [String], programIds: [String]? = nil, status: String, legacySignature: Bool, rotation: WebhookEndpointRotation, failingSince: String? = nil, disabledAt: String? = nil, disabledReason: String? = nil, createdAt: String) {
+    public init(id: String, url: String, topics: [String], programIds: [String]? = nil, status: String, legacySignature: Bool, rotation: WebhookEndpointRotation, failingSince: String? = nil, disabledAt: String? = nil, disabledReason: String? = nil, health: String, lastSuccessAt: String? = nil, lastFailure: WebhookEndpointLastFailureOption1? = nil, consecutiveFailures: Int, alertContacts: [String], createdAt: String) {
         self.id = id
         self.url = url
         self.topics = topics
@@ -1306,7 +1478,40 @@ public struct WebhookEndpoint: Codable, Sendable, Equatable {
         self.failingSince = failingSince
         self.disabledAt = disabledAt
         self.disabledReason = disabledReason
+        self.health = health
+        self.lastSuccessAt = lastSuccessAt
+        self.lastFailure = lastFailure
+        self.consecutiveFailures = consecutiveFailures
+        self.alertContacts = alertContacts
         self.createdAt = createdAt
+    }
+}
+
+public struct HealthCheck: Codable, Sendable, Equatable {
+    public var id: String
+    public var ok: Bool
+    public var detail: String
+    public var fix: String?
+    public var docs: String?
+    /// The hop that failed on a multi-system path, such as `stripe→referalli`.
+    public var hop: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case ok = "ok"
+        case detail = "detail"
+        case fix = "fix"
+        case docs = "docs"
+        case hop = "hop"
+    }
+
+    public init(id: String, ok: Bool, detail: String, fix: String? = nil, docs: String? = nil, hop: String? = nil) {
+        self.id = id
+        self.ok = ok
+        self.detail = detail
+        self.fix = fix
+        self.docs = docs
+        self.hop = hop
     }
 }
 
@@ -2054,8 +2259,10 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
     public var provider: String
     /// Returned only here.
     public var secret: String
-    /// Webhook connectors: Clerk, Supabase, WorkOS, generic.
+    /// Webhook connectors: Clerk, Auth0, Supabase, Firebase, Cognito, Stytch, Kinde, WorkOS, generic.
     public var webhookUrl: String?
+    /// Webhook connectors: the setup guide for this provider.
+    public var docsUrl: String?
     public var metadataKeys: [String: String]?
     /// Signed-protocol connections (atlas, custom).
     public var programId: String?
@@ -2071,6 +2278,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case provider = "provider"
         case secret = "secret"
         case webhookUrl = "webhookUrl"
+        case docsUrl = "docsUrl"
         case metadataKeys = "metadataKeys"
         case programId = "programId"
         case instanceId = "instanceId"
@@ -2081,11 +2289,12 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case exportUrl = "exportUrl"
     }
 
-    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil) {
+    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil) {
         self.id = id
         self.provider = provider
         self.secret = secret
         self.webhookUrl = webhookUrl
+        self.docsUrl = docsUrl
         self.metadataKeys = metadataKeys
         self.programId = programId
         self.instanceId = instanceId
@@ -5560,7 +5769,7 @@ public struct PrivacyRequestCompletedEvent: Codable, Sendable, Equatable {
     }
 }
 
-/// `data` of a `webhook_endpoint.disabled` event: Sent to your other active endpoints when one is disabled after every delivery failed for 5 days.
+/// `data` of a `webhook_endpoint.disabled` event: Sent to your other active endpoints when one is disabled after every delivery failed for 72 hours (or 1000 attempts in a row).
 public struct WebhookEndpointDisabledEventData: Codable, Sendable, Equatable {
     public var endpointId: String
     public var url: String
@@ -5606,6 +5815,122 @@ public struct WebhookEndpointDisabledEvent: Codable, Sendable, Equatable {
     }
 
     public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: WebhookEndpointDisabledEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `webhook_endpoint.failing` event: Sent to your other active endpoints (never the failing one) when an endpoint has failed every delivery for 1 hour, and again at 24 hours. It's disabled at `disablesAt` unless a delivery succeeds first.
+public struct WebhookEndpointFailingEventData: Codable, Sendable, Equatable {
+    public var endpointId: String
+    public var url: String
+    public var stage: String
+    public var failingSince: String
+    public var consecutiveFailures: Int
+    public var lastStatusCode: Int?
+    public var sampleError: String?
+    public var disablesAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case endpointId = "endpointId"
+        case url = "url"
+        case stage = "stage"
+        case failingSince = "failingSince"
+        case consecutiveFailures = "consecutiveFailures"
+        case lastStatusCode = "lastStatusCode"
+        case sampleError = "sampleError"
+        case disablesAt = "disablesAt"
+    }
+
+    public init(endpointId: String, url: String, stage: String, failingSince: String, consecutiveFailures: Int, lastStatusCode: Int? = nil, sampleError: String? = nil, disablesAt: String) {
+        self.endpointId = endpointId
+        self.url = url
+        self.stage = stage
+        self.failingSince = failingSince
+        self.consecutiveFailures = consecutiveFailures
+        self.lastStatusCode = lastStatusCode
+        self.sampleError = sampleError
+        self.disablesAt = disablesAt
+    }
+}
+
+/// A webhook endpoint keeps failing: the `webhook_endpoint.failing` delivery body.
+public struct WebhookEndpointFailingEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: WebhookEndpointFailingEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: WebhookEndpointFailingEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `webhook_endpoint.recovered` event: Sent to your active endpoints, including the recovered one, when a delivery succeeds after the endpoint was failing.
+public struct WebhookEndpointRecoveredEventData: Codable, Sendable, Equatable {
+    public var endpointId: String
+    public var url: String
+    public var failingSince: String
+    public var downForMs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case endpointId = "endpointId"
+        case url = "url"
+        case failingSince = "failingSince"
+        case downForMs = "downForMs"
+    }
+
+    public init(endpointId: String, url: String, failingSince: String, downForMs: Int) {
+        self.endpointId = endpointId
+        self.url = url
+        self.failingSince = failingSince
+        self.downForMs = downForMs
+    }
+}
+
+/// A failing webhook endpoint recovered: the `webhook_endpoint.recovered` delivery body.
+public struct WebhookEndpointRecoveredEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: WebhookEndpointRecoveredEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: WebhookEndpointRecoveredEventData) {
         self.id = id
         self.topic = topic
         self.orgId = orgId
@@ -5971,6 +6296,252 @@ public struct GetWellKnownAssetlinksJsonResponseValueItem: Codable, Sendable, Eq
 
 public typealias GetWellKnownAssetlinksJsonResponse = [GetWellKnownAssetlinksJsonResponseValueItem]
 
+public struct GetWellKnownForgedeckEmbedJsonResponseCheckers: Codable, Sendable, Equatable {
+    public var userAgent: String
+    public var egress: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case userAgent = "userAgent"
+        case egress = "egress"
+    }
+
+    public init(userAgent: String, egress: [String]) {
+        self.userAgent = userAgent
+        self.egress = egress
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetCookieDaysOption2: Codable, Sendable, Equatable {
+    public var `default`: Int
+    public var max: Int
+    public var note: String
+
+    enum CodingKeys: String, CodingKey {
+        case `default` = "default"
+        case max = "max"
+        case note = "note"
+    }
+
+    public init(`default`: Int, max: Int, note: String) {
+        self.`default` = `default`
+        self.max = max
+        self.note = note
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItemPurpose: Codable, Sendable, Equatable {
+    public var en: String
+
+    enum CodingKeys: String, CodingKey {
+        case en = "en"
+    }
+
+    public init(en: String) {
+        self.en = en
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var type: String
+    public var category: String
+    public var lifetime: String
+    public var purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItemPurpose
+    public var legacy: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case type = "type"
+        case category = "category"
+        case lifetime = "lifetime"
+        case purpose = "purpose"
+        case legacy = "legacy"
+    }
+
+    public init(name: String, type: String, category: String, lifetime: String, purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItemPurpose, legacy: Bool? = nil) {
+        self.name = name
+        self.type = type
+        self.category = category
+        self.lifetime = lifetime
+        self.purpose = purpose
+        self.legacy = legacy
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippet: Codable, Sendable, Equatable {
+    public var script: String
+    public var csp: [String: [String]]
+    public var consentCategory: String
+    public var consentFallbackCategory: String
+    public var consentAdapters: [String]
+    public var consentDefault: [String: JSONValue]?
+    public var cookieDays: JSONValue
+    public var storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItem]
+
+    enum CodingKeys: String, CodingKey {
+        case script = "script"
+        case csp = "csp"
+        case consentCategory = "consentCategory"
+        case consentFallbackCategory = "consentFallbackCategory"
+        case consentAdapters = "consentAdapters"
+        case consentDefault = "consentDefault"
+        case cookieDays = "cookieDays"
+        case storage = "storage"
+    }
+
+    public init(script: String, csp: [String: [String]], consentCategory: String, consentFallbackCategory: String, consentAdapters: [String], consentDefault: [String: JSONValue]? = nil, cookieDays: JSONValue, storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItem]) {
+        self.script = script
+        self.csp = csp
+        self.consentCategory = consentCategory
+        self.consentFallbackCategory = consentFallbackCategory
+        self.consentAdapters = consentAdapters
+        self.consentDefault = consentDefault
+        self.cookieDays = cookieDays
+        self.storage = storage
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItemPurpose: Codable, Sendable, Equatable {
+    public var en: String
+
+    enum CodingKeys: String, CodingKey {
+        case en = "en"
+    }
+
+    public init(en: String) {
+        self.en = en
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var type: String
+    public var category: String
+    public var lifetime: String
+    public var purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItemPurpose
+    public var legacy: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case type = "type"
+        case category = "category"
+        case lifetime = "lifetime"
+        case purpose = "purpose"
+        case legacy = "legacy"
+    }
+
+    public init(name: String, type: String, category: String, lifetime: String, purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItemPurpose, legacy: Bool? = nil) {
+        self.name = name
+        self.type = type
+        self.category = category
+        self.lifetime = lifetime
+        self.purpose = purpose
+        self.legacy = legacy
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbed: Codable, Sendable, Equatable {
+    public var script: String
+    public var csp: [String: [String]]
+    public var consentCategory: String
+    public var storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItem]
+
+    enum CodingKeys: String, CodingKey {
+        case script = "script"
+        case csp = "csp"
+        case consentCategory = "consentCategory"
+        case storage = "storage"
+    }
+
+    public init(script: String, csp: [String: [String]], consentCategory: String, storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItem]) {
+        self.script = script
+        self.csp = csp
+        self.consentCategory = consentCategory
+        self.storage = storage
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseSurfaces: Codable, Sendable, Equatable {
+    public var trackingSnippet: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippet
+    public var portalEmbed: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbed
+
+    enum CodingKeys: String, CodingKey {
+        case trackingSnippet = "tracking-snippet"
+        case portalEmbed = "portal-embed"
+    }
+
+    public init(trackingSnippet: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippet, portalEmbed: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbed) {
+        self.trackingSnippet = trackingSnippet
+        self.portalEmbed = portalEmbed
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponseChangesItem: Codable, Sendable, Equatable {
+    public var effective: String
+    public var surface: String
+    public var add: [String]?
+    public var remove: [String]?
+    public var note: String
+
+    enum CodingKeys: String, CodingKey {
+        case effective = "effective"
+        case surface = "surface"
+        case add = "add"
+        case remove = "remove"
+        case note = "note"
+    }
+
+    public init(effective: String, surface: String, add: [String]? = nil, remove: [String]? = nil, note: String) {
+        self.effective = effective
+        self.surface = surface
+        self.add = add
+        self.remove = remove
+        self.note = note
+    }
+}
+
+public struct GetWellKnownForgedeckEmbedJsonResponse: Codable, Sendable, Equatable {
+    public var schema: String
+    public var product: String
+    public var updated: String
+    public var openapi: String
+    public var llms: String
+    public var status: String
+    public var docs: String
+    public var checkers: GetWellKnownForgedeckEmbedJsonResponseCheckers
+    public var org: String?
+    public var surfaces: GetWellKnownForgedeckEmbedJsonResponseSurfaces
+    public var changes: [GetWellKnownForgedeckEmbedJsonResponseChangesItem]
+
+    enum CodingKeys: String, CodingKey {
+        case schema = "schema"
+        case product = "product"
+        case updated = "updated"
+        case openapi = "openapi"
+        case llms = "llms"
+        case status = "status"
+        case docs = "docs"
+        case checkers = "checkers"
+        case org = "org"
+        case surfaces = "surfaces"
+        case changes = "changes"
+    }
+
+    public init(schema: String, product: String, updated: String, openapi: String, llms: String, status: String, docs: String, checkers: GetWellKnownForgedeckEmbedJsonResponseCheckers, org: String? = nil, surfaces: GetWellKnownForgedeckEmbedJsonResponseSurfaces, changes: [GetWellKnownForgedeckEmbedJsonResponseChangesItem]) {
+        self.schema = schema
+        self.product = product
+        self.updated = updated
+        self.openapi = openapi
+        self.llms = llms
+        self.status = status
+        self.docs = docs
+        self.checkers = checkers
+        self.org = org
+        self.surfaces = surfaces
+        self.changes = changes
+    }
+}
+
 public struct PostAgentsRegisterResponse: Codable, Sendable, Equatable {
     public var agentId: String
     public var wallet: String
@@ -6120,6 +6691,18 @@ public struct GetAuthProvidersResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostAuthBackchannelLogoutResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+    }
+
+    public init(ok: Bool) {
+        self.ok = ok
+    }
+}
+
 public struct PostAuthLogoutResponse: Codable, Sendable, Equatable {
     public var ok: Bool
     public var logoutUrl: String?
@@ -6261,6 +6844,160 @@ public struct GetMeResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetPortalAuthCurrentResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    /// The sign-in button label.
+    public var name: String?
+    /// Where the button sends the partner; null for Referalli accounts.
+    public var startUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case name = "name"
+        case startUrl = "startUrl"
+    }
+
+    public init(adapter: String, name: String? = nil, startUrl: String? = nil) {
+        self.adapter = adapter
+        self.name = name
+        self.startUrl = startUrl
+    }
+}
+
+public struct GetOrgPortalAuthResponseAdaptersItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var label: String
+    public var status: String
+    public var docsUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case label = "label"
+        case status = "status"
+        case docsUrl = "docsUrl"
+    }
+
+    public init(id: String, label: String, status: String, docsUrl: String) {
+        self.id = id
+        self.label = label
+        self.status = status
+        self.docsUrl = docsUrl
+    }
+}
+
+public struct GetOrgPortalAuthResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    /// The stored settings; a client secret is sealed and never returned.
+    public var config: [String: JSONValue]
+    public var adapters: [GetOrgPortalAuthResponseAdaptersItem]
+    /// For the `custom` adapter: the `aud` your tokens must carry.
+    public var jwtAudience: String
+    /// For the `custom` adapter: send the partner here with `token=<jwt>`.
+    public var jwtSignInUrl: String
+    /// For the `oidc` adapter: the redirect URI to register at your IdP.
+    public var redirectUri: String
+    public var hasSecret: Bool
+    public var status: String
+    public var lastOkAt: String?
+    public var lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+        case adapters = "adapters"
+        case jwtAudience = "jwtAudience"
+        case jwtSignInUrl = "jwtSignInUrl"
+        case redirectUri = "redirectUri"
+        case hasSecret = "hasSecret"
+        case status = "status"
+        case lastOkAt = "lastOkAt"
+        case lastError = "lastError"
+    }
+
+    public init(adapter: String, config: [String: JSONValue], adapters: [GetOrgPortalAuthResponseAdaptersItem], jwtAudience: String, jwtSignInUrl: String, redirectUri: String, hasSecret: Bool, status: String, lastOkAt: String? = nil, lastError: String? = nil) {
+        self.adapter = adapter
+        self.config = config
+        self.adapters = adapters
+        self.jwtAudience = jwtAudience
+        self.jwtSignInUrl = jwtSignInUrl
+        self.redirectUri = redirectUri
+        self.hasSecret = hasSecret
+        self.status = status
+        self.lastOkAt = lastOkAt
+        self.lastError = lastError
+    }
+}
+
+public struct PutOrgPortalAuthResponseAdaptersItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var label: String
+    public var status: String
+    public var docsUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case label = "label"
+        case status = "status"
+        case docsUrl = "docsUrl"
+    }
+
+    public init(id: String, label: String, status: String, docsUrl: String) {
+        self.id = id
+        self.label = label
+        self.status = status
+        self.docsUrl = docsUrl
+    }
+}
+
+public struct PutOrgPortalAuthResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    /// The stored settings; a client secret is sealed and never returned.
+    public var config: [String: JSONValue]
+    public var adapters: [PutOrgPortalAuthResponseAdaptersItem]
+    /// For the `custom` adapter: the `aud` your tokens must carry.
+    public var jwtAudience: String
+    /// For the `custom` adapter: send the partner here with `token=<jwt>`.
+    public var jwtSignInUrl: String
+    /// For the `oidc` adapter: the redirect URI to register at your IdP.
+    public var redirectUri: String
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+        case adapters = "adapters"
+        case jwtAudience = "jwtAudience"
+        case jwtSignInUrl = "jwtSignInUrl"
+        case redirectUri = "redirectUri"
+    }
+
+    public init(adapter: String, config: [String: JSONValue], adapters: [PutOrgPortalAuthResponseAdaptersItem], jwtAudience: String, jwtSignInUrl: String, redirectUri: String) {
+        self.adapter = adapter
+        self.config = config
+        self.adapters = adapters
+        self.jwtAudience = jwtAudience
+        self.jwtSignInUrl = jwtSignInUrl
+        self.redirectUri = redirectUri
+    }
+}
+
+public struct PostOrgPortalAuthTestResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public var detail: String
+    public var fix: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case detail = "detail"
+        case fix = "fix"
+    }
+
+    public init(ok: Bool, detail: String, fix: String? = nil) {
+        self.ok = ok
+        self.detail = detail
+        self.fix = fix
+    }
+}
+
 public struct GetHostsCurrentResponseValueOption1Branding: Codable, Sendable, Equatable {
     public var logoUrl: String
     public var theme: [String: String]
@@ -6291,6 +7028,111 @@ public struct GetHostsCurrentResponseValueOption1ProgramsItem: Codable, Sendable
     }
 }
 
+public struct GetHostsCurrentResponseValueOption1ConsentTagsItem: Codable, Sendable, Equatable {
+    public var tag: String
+    public var attrs: [String: JSONValue]
+    public var inline: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tag = "tag"
+        case attrs = "attrs"
+        case inline = "inline"
+    }
+
+    public init(tag: String, attrs: [String: JSONValue], inline: String? = nil) {
+        self.tag = tag
+        self.attrs = attrs
+        self.inline = inline
+    }
+}
+
+public struct GetHostsCurrentResponseValueOption1ConsentSettingsLinkOption1: Codable, Sendable, Equatable {
+    public var call: String?
+    public var attrs: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case call = "call"
+        case attrs = "attrs"
+    }
+
+    public init(call: String? = nil, attrs: [String: String]? = nil) {
+        self.call = call
+        self.attrs = attrs
+    }
+}
+
+public struct GetHostsCurrentResponseValueOption1ConsentBuiltin: Codable, Sendable, Equatable {
+    public var policyUrl: String
+    public var text: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case policyUrl = "policyUrl"
+        case text = "text"
+    }
+
+    public init(policyUrl: String, text: [String: String]? = nil) {
+        self.policyUrl = policyUrl
+        self.text = text
+    }
+}
+
+public struct GetHostsCurrentResponseValueOption1Consent: Codable, Sendable, Equatable {
+    public var mode: String
+    public var provider: String
+    public var tags: [GetHostsCurrentResponseValueOption1ConsentTagsItem]
+    public var settingsLink: GetHostsCurrentResponseValueOption1ConsentSettingsLinkOption1?
+    public var builtin: GetHostsCurrentResponseValueOption1ConsentBuiltin?
+
+    enum CodingKeys: String, CodingKey {
+        case mode = "mode"
+        case provider = "provider"
+        case tags = "tags"
+        case settingsLink = "settingsLink"
+        case builtin = "builtin"
+    }
+
+    public init(mode: String, provider: String, tags: [GetHostsCurrentResponseValueOption1ConsentTagsItem], settingsLink: GetHostsCurrentResponseValueOption1ConsentSettingsLinkOption1? = nil, builtin: GetHostsCurrentResponseValueOption1ConsentBuiltin? = nil) {
+        self.mode = mode
+        self.provider = provider
+        self.tags = tags
+        self.settingsLink = settingsLink
+        self.builtin = builtin
+    }
+}
+
+public struct GetHostsCurrentResponseValueOption1ChatOption1TagsItem: Codable, Sendable, Equatable {
+    public var tag: String
+    public var attrs: [String: JSONValue]
+    public var inline: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tag = "tag"
+        case attrs = "attrs"
+        case inline = "inline"
+    }
+
+    public init(tag: String, attrs: [String: JSONValue], inline: String? = nil) {
+        self.tag = tag
+        self.attrs = attrs
+        self.inline = inline
+    }
+}
+
+public struct GetHostsCurrentResponseValueOption1ChatOption1: Codable, Sendable, Equatable {
+    public var provider: String
+    public var tags: [GetHostsCurrentResponseValueOption1ChatOption1TagsItem]
+
+    enum CodingKeys: String, CodingKey {
+        case provider = "provider"
+        case tags = "tags"
+    }
+
+    public init(provider: String, tags: [GetHostsCurrentResponseValueOption1ChatOption1TagsItem]) {
+        self.provider = provider
+        self.tags = tags
+    }
+}
+
 public struct GetHostsCurrentResponseValueOption1: Codable, Sendable, Equatable {
     /// A merchant's verified partner-portal domain.
     public var kind: String
@@ -6299,6 +7141,10 @@ public struct GetHostsCurrentResponseValueOption1: Codable, Sendable, Equatable 
     public var branding: GetHostsCurrentResponseValueOption1Branding
     /// The org's active programs with a public signup page (/join/:handle).
     public var programs: [GetHostsCurrentResponseValueOption1ProgramsItem]
+    public var consent: GetHostsCurrentResponseValueOption1Consent
+    public var chat: GetHostsCurrentResponseValueOption1ChatOption1?
+    /// The Content-Security-Policy for this host's pages, built from the enabled adapters.
+    public var csp: String
 
     enum CodingKeys: String, CodingKey {
         case kind = "kind"
@@ -6306,27 +7152,36 @@ public struct GetHostsCurrentResponseValueOption1: Codable, Sendable, Equatable 
         case orgName = "orgName"
         case branding = "branding"
         case programs = "programs"
+        case consent = "consent"
+        case chat = "chat"
+        case csp = "csp"
     }
 
-    public init(kind: String, orgId: String, orgName: String, branding: GetHostsCurrentResponseValueOption1Branding, programs: [GetHostsCurrentResponseValueOption1ProgramsItem]) {
+    public init(kind: String, orgId: String, orgName: String, branding: GetHostsCurrentResponseValueOption1Branding, programs: [GetHostsCurrentResponseValueOption1ProgramsItem], consent: GetHostsCurrentResponseValueOption1Consent, chat: GetHostsCurrentResponseValueOption1ChatOption1? = nil, csp: String) {
         self.kind = kind
         self.orgId = orgId
         self.orgName = orgName
         self.branding = branding
         self.programs = programs
+        self.consent = consent
+        self.chat = chat
+        self.csp = csp
     }
 }
 
 public struct GetHostsCurrentResponseValueOption2: Codable, Sendable, Equatable {
     /// A merchant's verified link domain.
     public var kind: String
+    public var csp: String
 
     enum CodingKeys: String, CodingKey {
         case kind = "kind"
+        case csp = "csp"
     }
 
-    public init(kind: String) {
+    public init(kind: String, csp: String) {
         self.kind = kind
+        self.csp = csp
     }
 }
 
@@ -6344,6 +7199,41 @@ public struct GetHostsCurrentResponseValueOption3: Codable, Sendable, Equatable 
 }
 
 public typealias GetHostsCurrentResponse = JSONValue
+
+public struct GetChatlyIdentityResponseIdentityOption1: Codable, Sendable, Equatable {
+    /// `merchant:<user id>` or `partner:<partner account id>`.
+    public var externalId: String
+    public var email: String
+    public var name: String?
+    /// HMAC-SHA256 of `externalId` (hex), for the widget's identity verification.
+    public var userHash: String
+
+    enum CodingKeys: String, CodingKey {
+        case externalId = "externalId"
+        case email = "email"
+        case name = "name"
+        case userHash = "userHash"
+    }
+
+    public init(externalId: String, email: String, name: String? = nil, userHash: String) {
+        self.externalId = externalId
+        self.email = email
+        self.name = name
+        self.userHash = userHash
+    }
+}
+
+public struct GetChatlyIdentityResponse: Codable, Sendable, Equatable {
+    public var identity: GetChatlyIdentityResponseIdentityOption1?
+
+    enum CodingKeys: String, CodingKey {
+        case identity = "identity"
+    }
+
+    public init(identity: GetChatlyIdentityResponseIdentityOption1? = nil) {
+        self.identity = identity
+    }
+}
 
 public struct PostMobilePurchasesResponse: Codable, Sendable, Equatable {
     public var conversions: Int
@@ -7977,6 +8867,21 @@ public struct GetBillingEventsResponse: Codable, Sendable, Equatable {
         self.data = data
         self.hasMore = hasMore
         self.nextCursor = nextCursor
+    }
+}
+
+public struct PostBillingInternalCustomersResponse: Codable, Sendable, Equatable {
+    public var customerRef: String
+    public var note: String
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case note = "note"
+    }
+
+    public init(customerRef: String, note: String) {
+        self.customerRef = customerRef
+        self.note = note
     }
 }
 
@@ -9986,6 +10891,7 @@ public struct PostWebhookEndpointsResponse: Codable, Sendable, Equatable {
     public var topics: [String]
     public var programIds: [String]?
     public var legacySignature: Bool
+    public var alertContacts: [String]
     /// Returned only here. whsec_ + base64 key (Standard Webhooks).
     public var secret: String
 
@@ -9995,15 +10901,17 @@ public struct PostWebhookEndpointsResponse: Codable, Sendable, Equatable {
         case topics = "topics"
         case programIds = "programIds"
         case legacySignature = "legacySignature"
+        case alertContacts = "alertContacts"
         case secret = "secret"
     }
 
-    public init(id: String, url: String, topics: [String], programIds: [String]? = nil, legacySignature: Bool, secret: String) {
+    public init(id: String, url: String, topics: [String], programIds: [String]? = nil, legacySignature: Bool, alertContacts: [String], secret: String) {
         self.id = id
         self.url = url
         self.topics = topics
         self.programIds = programIds
         self.legacySignature = legacySignature
+        self.alertContacts = alertContacts
         self.secret = secret
     }
 }
@@ -10029,6 +10937,8 @@ public struct GetWebhookEndpointsResponse: Codable, Sendable, Equatable {
         self.nextCursor = nextCursor
     }
 }
+
+public typealias PatchWebhookEndpointsIdResponse = JSONValue
 
 public struct PostWebhookEndpointsIdRotateSecretResponse: Codable, Sendable, Equatable {
     public var id: String
@@ -10095,6 +11005,24 @@ public struct GetWebhookEndpointsIdDeliveriesResponse: Codable, Sendable, Equata
 
 public typealias GetWebhookDeliveriesIdResponse = JSONValue
 
+public struct PostWebhookEndpointsIdReplayResponse: Codable, Sendable, Equatable {
+    public var endpointId: String
+    public var since: String
+    public var replayed: Int
+
+    enum CodingKeys: String, CodingKey {
+        case endpointId = "endpointId"
+        case since = "since"
+        case replayed = "replayed"
+    }
+
+    public init(endpointId: String, since: String, replayed: Int) {
+        self.endpointId = endpointId
+        self.since = since
+        self.replayed = replayed
+    }
+}
+
 public struct PostSandboxSimulateResponse: Codable, Sendable, Equatable {
     public var customerRef: String
     public var events: Int
@@ -10158,6 +11086,33 @@ public struct PostImportProviderResponse: Codable, Sendable, Equatable {
 
 public typealias GetOpenapiJsonResponse = [String: JSONValue]
 
+public struct GetBrandingResponseWarningsItem: Codable, Sendable, Equatable {
+    public var code: String
+    public var foreground: String
+    public var background: String
+    public var ratio: Double
+    public var minimum: Double
+    public var message: String
+
+    enum CodingKeys: String, CodingKey {
+        case code = "code"
+        case foreground = "foreground"
+        case background = "background"
+        case ratio = "ratio"
+        case minimum = "minimum"
+        case message = "message"
+    }
+
+    public init(code: String, foreground: String, background: String, ratio: Double, minimum: Double, message: String) {
+        self.code = code
+        self.foreground = foreground
+        self.background = background
+        self.ratio = ratio
+        self.minimum = minimum
+        self.message = message
+    }
+}
+
 public struct GetBrandingResponse: Codable, Sendable, Equatable {
     public var logoUrl: String?
     public var theme: GetOpenapiJsonResponse?
@@ -10170,6 +11125,8 @@ public struct GetBrandingResponse: Codable, Sendable, Equatable {
     /// none; pending (waiting for DNS); provisioning (routed here, certificate being issued); active (links/portal served on it).
     public var linkDomainStatus: String
     public var emailFrom: String?
+    /// Theme colour pairs below WCAG AA (4.5:1).
+    public var warnings: [GetBrandingResponseWarningsItem]
 
     enum CodingKeys: String, CodingKey {
         case logoUrl = "logoUrl"
@@ -10181,9 +11138,10 @@ public struct GetBrandingResponse: Codable, Sendable, Equatable {
         case linkDomainVerified = "linkDomainVerified"
         case linkDomainStatus = "linkDomainStatus"
         case emailFrom = "emailFrom"
+        case warnings = "warnings"
     }
 
-    public init(logoUrl: String? = nil, theme: GetOpenapiJsonResponse? = nil, portalDomain: String? = nil, portalDomainVerified: Bool, portalDomainStatus: String, linkDomain: String? = nil, linkDomainVerified: Bool, linkDomainStatus: String, emailFrom: String? = nil) {
+    public init(logoUrl: String? = nil, theme: GetOpenapiJsonResponse? = nil, portalDomain: String? = nil, portalDomainVerified: Bool, portalDomainStatus: String, linkDomain: String? = nil, linkDomainVerified: Bool, linkDomainStatus: String, emailFrom: String? = nil, warnings: [GetBrandingResponseWarningsItem]) {
         self.logoUrl = logoUrl
         self.theme = theme
         self.portalDomain = portalDomain
@@ -10193,6 +11151,7 @@ public struct GetBrandingResponse: Codable, Sendable, Equatable {
         self.linkDomainVerified = linkDomainVerified
         self.linkDomainStatus = linkDomainStatus
         self.emailFrom = emailFrom
+        self.warnings = warnings
     }
 }
 
@@ -10265,6 +11224,48 @@ public struct PostBrandingDomainResponse: Codable, Sendable, Equatable {
         self.txtName = txtName
         self.verified = verified
         self.instructions = instructions
+    }
+}
+
+public struct PutBrandingResponseWarningsItem: Codable, Sendable, Equatable {
+    public var code: String
+    public var foreground: String
+    public var background: String
+    public var ratio: Double
+    public var minimum: Double
+    public var message: String
+
+    enum CodingKeys: String, CodingKey {
+        case code = "code"
+        case foreground = "foreground"
+        case background = "background"
+        case ratio = "ratio"
+        case minimum = "minimum"
+        case message = "message"
+    }
+
+    public init(code: String, foreground: String, background: String, ratio: Double, minimum: Double, message: String) {
+        self.code = code
+        self.foreground = foreground
+        self.background = background
+        self.ratio = ratio
+        self.minimum = minimum
+        self.message = message
+    }
+}
+
+public struct PutBrandingResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public var warnings: [PutBrandingResponseWarningsItem]
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case warnings = "warnings"
+    }
+
+    public init(ok: Bool, warnings: [PutBrandingResponseWarningsItem]) {
+        self.ok = ok
+        self.warnings = warnings
     }
 }
 
@@ -11243,6 +12244,137 @@ public struct PostRewardsRedeemByCodeResponse: Codable, Sendable, Equatable {
         self.redeemedMinor = redeemedMinor
         self.remainingMinor = remainingMinor
         self.capped = capped
+    }
+}
+
+public struct PostRewardsResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var partnerId: String
+    public var programId: String
+    public var ruleKey: String?
+    public var reason: String
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+    public var currency: String
+    public var commissionId: String?
+    public var idempotencyKey: String
+    public var createdAt: String
+    public var replayed: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case partnerId = "partnerId"
+        case programId = "programId"
+        case ruleKey = "ruleKey"
+        case reason = "reason"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case commissionId = "commissionId"
+        case idempotencyKey = "idempotencyKey"
+        case createdAt = "createdAt"
+        case replayed = "replayed"
+    }
+
+    public init(id: String, partnerId: String, programId: String, ruleKey: String? = nil, reason: String, amountMinor: Int, currency: String, commissionId: String? = nil, idempotencyKey: String, createdAt: String, replayed: Bool) {
+        self.id = id
+        self.partnerId = partnerId
+        self.programId = programId
+        self.ruleKey = ruleKey
+        self.reason = reason
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.commissionId = commissionId
+        self.idempotencyKey = idempotencyKey
+        self.createdAt = createdAt
+        self.replayed = replayed
+    }
+}
+
+public struct GetRewardsGrantedResponseValueItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var partnerId: String
+    public var programId: String
+    public var ruleKey: String?
+    public var reason: String
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+    public var currency: String
+    public var commissionId: String?
+    public var idempotencyKey: String
+    public var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case partnerId = "partnerId"
+        case programId = "programId"
+        case ruleKey = "ruleKey"
+        case reason = "reason"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case commissionId = "commissionId"
+        case idempotencyKey = "idempotencyKey"
+        case createdAt = "createdAt"
+    }
+
+    public init(id: String, partnerId: String, programId: String, ruleKey: String? = nil, reason: String, amountMinor: Int, currency: String, commissionId: String? = nil, idempotencyKey: String, createdAt: String) {
+        self.id = id
+        self.partnerId = partnerId
+        self.programId = programId
+        self.ruleKey = ruleKey
+        self.reason = reason
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.commissionId = commissionId
+        self.idempotencyKey = idempotencyKey
+        self.createdAt = createdAt
+    }
+}
+
+public typealias GetRewardsGrantedResponse = [GetRewardsGrantedResponseValueItem]
+
+public struct PutRewardsRulesKeyResponse: Codable, Sendable, Equatable {
+    public var key: String
+    public var event: String?
+    public var programId: String?
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+    public var currency: String
+    public var reason: String
+    public var enabled: Bool
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case key = "key"
+        case event = "event"
+        case programId = "programId"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case reason = "reason"
+        case enabled = "enabled"
+        case updatedAt = "updatedAt"
+    }
+
+    public init(key: String, event: String? = nil, programId: String? = nil, amountMinor: Int, currency: String, reason: String, enabled: Bool, updatedAt: String) {
+        self.key = key
+        self.event = event
+        self.programId = programId
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.reason = reason
+        self.enabled = enabled
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct DeleteRewardsRulesKeyResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+    }
+
+    public init(ok: Bool) {
+        self.ok = ok
     }
 }
 
@@ -13527,6 +14659,18 @@ public struct GetPartnerSecurityResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetAuthConnectionsProvidersResponse: Codable, Sendable, Equatable {
+    public var data: [IdentityProvider]
+
+    enum CodingKeys: String, CodingKey {
+        case data = "data"
+    }
+
+    public init(data: [IdentityProvider]) {
+        self.data = data
+    }
+}
+
 public struct GetAuthConnectionsResponse: Codable, Sendable, Equatable {
     public var object: String
     public var data: [AuthConnection]
@@ -13546,6 +14690,24 @@ public struct GetAuthConnectionsResponse: Codable, Sendable, Equatable {
         self.data = data
         self.hasMore = hasMore
         self.nextCursor = nextCursor
+    }
+}
+
+public struct PutAuthConnectionsIdSecretResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var provider: String
+    public var ok: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case provider = "provider"
+        case ok = "ok"
+    }
+
+    public init(id: String, provider: String, ok: Bool) {
+        self.id = id
+        self.provider = provider
+        self.ok = ok
     }
 }
 
@@ -13705,6 +14867,37 @@ public struct PostAuthConnectionsIdSignupsResponse: Codable, Sendable, Equatable
         self.test = test
         self.referral = referral
         self.reasoning = reasoning
+        self.partner = partner
+    }
+}
+
+public struct PostAuthConnectionsIdPartnersResponsePartner: Codable, Sendable, Equatable {
+    public var id: String
+    public var code: String
+    /// Their tracked link, when the connection has a destination.
+    public var link: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case code = "code"
+        case link = "link"
+    }
+
+    public init(id: String, code: String, link: String? = nil) {
+        self.id = id
+        self.code = code
+        self.link = link
+    }
+}
+
+public struct PostAuthConnectionsIdPartnersResponse: Codable, Sendable, Equatable {
+    public var partner: PostAuthConnectionsIdPartnersResponsePartner
+
+    enum CodingKeys: String, CodingKey {
+        case partner = "partner"
+    }
+
+    public init(partner: PostAuthConnectionsIdPartnersResponsePartner) {
         self.partner = partner
     }
 }
@@ -13981,6 +15174,62 @@ public struct PostAuthConnectionsIdSignalsResponse: Codable, Sendable, Equatable
     }
 }
 
+public struct PostAuthConnectionsInstallResponse: Codable, Sendable, Equatable {
+    /// Send the browser here: back to the platform with a code, or error=access_denied.
+    public var redirectTo: String
+
+    enum CodingKeys: String, CodingKey {
+        case redirectTo = "redirectTo"
+    }
+
+    public init(redirectTo: String) {
+        self.redirectTo = redirectTo
+    }
+}
+
+public struct PostOauthTokenResponse: Codable, Sendable, Equatable {
+    public var tokenType: String
+    public var connectionId: String
+    public var provider: String
+    public var instanceId: String
+    public var programId: String
+    /// The connection signing secret. Returned only here.
+    public var secret: String
+    public var reinstalled: Bool
+    public var signupsUrl: String
+    public var partnersUrl: String
+    public var eraseUrl: String
+    public var exportUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case tokenType = "token_type"
+        case connectionId = "connectionId"
+        case provider = "provider"
+        case instanceId = "instanceId"
+        case programId = "programId"
+        case secret = "secret"
+        case reinstalled = "reinstalled"
+        case signupsUrl = "signupsUrl"
+        case partnersUrl = "partnersUrl"
+        case eraseUrl = "eraseUrl"
+        case exportUrl = "exportUrl"
+    }
+
+    public init(tokenType: String, connectionId: String, provider: String, instanceId: String, programId: String, secret: String, reinstalled: Bool, signupsUrl: String, partnersUrl: String, eraseUrl: String, exportUrl: String) {
+        self.tokenType = tokenType
+        self.connectionId = connectionId
+        self.provider = provider
+        self.instanceId = instanceId
+        self.programId = programId
+        self.secret = secret
+        self.reinstalled = reinstalled
+        self.signupsUrl = signupsUrl
+        self.partnersUrl = partnersUrl
+        self.eraseUrl = eraseUrl
+        self.exportUrl = exportUrl
+    }
+}
+
 public struct GetOrgSsoResponseProviderOption1: Codable, Sendable, Equatable {
     public var name: String
     public var label: String
@@ -14180,6 +15429,45 @@ public struct PatchOrgSsoResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutOrgSsoDirectResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    /// The stored settings; the secret is sealed and never returned.
+    public var config: [String: JSONValue]
+    public var hasSecret: Bool
+    /// Where members start sign-in (GET /v1/auth/sso/start?org=…).
+    public var signInUrl: String
+    /// The redirect URI to register at the IdP.
+    public var redirectUri: String
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+        case hasSecret = "hasSecret"
+        case signInUrl = "signInUrl"
+        case redirectUri = "redirectUri"
+    }
+
+    public init(adapter: String, config: [String: JSONValue], hasSecret: Bool, signInUrl: String, redirectUri: String) {
+        self.adapter = adapter
+        self.config = config
+        self.hasSecret = hasSecret
+        self.signInUrl = signInUrl
+        self.redirectUri = redirectUri
+    }
+}
+
+public struct DeleteOrgSsoDirectResponse: Codable, Sendable, Equatable {
+    public var removed: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case removed = "removed"
+    }
+
+    public init(removed: Bool) {
+        self.removed = removed
+    }
+}
+
 public struct PostPartnerAuthWalletNonceResponse: Codable, Sendable, Equatable {
     public var nonce: String
     public var message: String
@@ -14358,12 +15646,1078 @@ public struct PostPublicProgramsHandleJoinResponse: Codable, Sendable, Equatable
     }
 }
 
+public struct GetIntegrationHealthResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public var checks: [HealthCheck]
+    public var generatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case checks = "checks"
+        case generatedAt = "generatedAt"
+    }
+
+    public init(ok: Bool, checks: [HealthCheck], generatedAt: String) {
+        self.ok = ok
+        self.checks = checks
+        self.generatedAt = generatedAt
+    }
+}
+
+public struct GetPlansResponsePlansItem: Codable, Sendable, Equatable {
+    public var key: String
+    public var label: String
+    /// Integer minor units (cents).
+    public var priceMinor: Int
+    public var currency: String
+    public var interval: String
+    /// null: unlimited.
+    public var maxPrograms: Int?
+    /// null: unlimited.
+    public var maxPartners: Int?
+    public var marketplace: Bool
+    public var discovery: Bool
+    public var linkDomain: Bool
+    public var portalDomain: Bool
+    public var apiPerSec: Int
+    public var apiBurst: Int
+
+    enum CodingKeys: String, CodingKey {
+        case key = "key"
+        case label = "label"
+        case priceMinor = "priceMinor"
+        case currency = "currency"
+        case interval = "interval"
+        case maxPrograms = "maxPrograms"
+        case maxPartners = "maxPartners"
+        case marketplace = "marketplace"
+        case discovery = "discovery"
+        case linkDomain = "linkDomain"
+        case portalDomain = "portalDomain"
+        case apiPerSec = "apiPerSec"
+        case apiBurst = "apiBurst"
+    }
+
+    public init(key: String, label: String, priceMinor: Int, currency: String, interval: String, maxPrograms: Int? = nil, maxPartners: Int? = nil, marketplace: Bool, discovery: Bool, linkDomain: Bool, portalDomain: Bool, apiPerSec: Int, apiBurst: Int) {
+        self.key = key
+        self.label = label
+        self.priceMinor = priceMinor
+        self.currency = currency
+        self.interval = interval
+        self.maxPrograms = maxPrograms
+        self.maxPartners = maxPartners
+        self.marketplace = marketplace
+        self.discovery = discovery
+        self.linkDomain = linkDomain
+        self.portalDomain = portalDomain
+        self.apiPerSec = apiPerSec
+        self.apiBurst = apiBurst
+    }
+}
+
+public struct GetPlansResponse: Codable, Sendable, Equatable {
+    public var plans: [GetPlansResponsePlansItem]
+
+    enum CodingKeys: String, CodingKey {
+        case plans = "plans"
+    }
+
+    public init(plans: [GetPlansResponsePlansItem]) {
+        self.plans = plans
+    }
+}
+
+public struct GetEventsResponseEventsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    public var livemode: Bool
+    public var createdAt: String
+    /// The topic's payload (see the webhooks section).
+    public var data: GetOpenapiJsonResponse
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: GetOpenapiJsonResponse) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+public struct GetEventsResponse: Codable, Sendable, Equatable {
+    public var events: [GetEventsResponseEventsItem]
+    public var hasMore: Bool
+    /// Pass as `after` for the next page; null on the last.
+    public var nextCursor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case events = "events"
+        case hasMore = "hasMore"
+        case nextCursor = "nextCursor"
+    }
+
+    public init(events: [GetEventsResponseEventsItem], hasMore: Bool, nextCursor: String? = nil) {
+        self.events = events
+        self.hasMore = hasMore
+        self.nextCursor = nextCursor
+    }
+}
+
+public struct GetSupportContextResponsePartnerOption1: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var status: String
+    public var tier: String?
+    public var programs: [String]
+    public var referralLink: String?
+    /// Integer minor units (cents).
+    public var pendingMinor: Int
+    /// Integer minor units (cents).
+    public var approvedMinor: Int
+    /// Integer minor units (cents).
+    public var paidMinor: Int
+    public var currency: String
+    public var nextPayoutAt: String?
+    public var flags: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case status = "status"
+        case tier = "tier"
+        case programs = "programs"
+        case referralLink = "referralLink"
+        case pendingMinor = "pendingMinor"
+        case approvedMinor = "approvedMinor"
+        case paidMinor = "paidMinor"
+        case currency = "currency"
+        case nextPayoutAt = "nextPayoutAt"
+        case flags = "flags"
+    }
+
+    public init(id: String, name: String, status: String, tier: String? = nil, programs: [String], referralLink: String? = nil, pendingMinor: Int, approvedMinor: Int, paidMinor: Int, currency: String, nextPayoutAt: String? = nil, flags: [String]) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.tier = tier
+        self.programs = programs
+        self.referralLink = referralLink
+        self.pendingMinor = pendingMinor
+        self.approvedMinor = approvedMinor
+        self.paidMinor = paidMinor
+        self.currency = currency
+        self.nextPayoutAt = nextPayoutAt
+        self.flags = flags
+    }
+}
+
+public struct GetSupportContextResponseCustomerOption1ReferredByOption1: Codable, Sendable, Equatable {
+    public var partnerId: String
+    public var name: String
+
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partnerId"
+        case name = "name"
+    }
+
+    public init(partnerId: String, name: String) {
+        self.partnerId = partnerId
+        self.name = name
+    }
+}
+
+public struct GetSupportContextResponseCustomerOption1RewardStateOption1: Codable, Sendable, Equatable {
+    public var kind: String
+    public var status: String
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+    public var currency: String
+    /// Integer minor units (cents).
+    public var remainingMinor: Int
+
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case status = "status"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case remainingMinor = "remainingMinor"
+    }
+
+    public init(kind: String, status: String, amountMinor: Int, currency: String, remainingMinor: Int) {
+        self.kind = kind
+        self.status = status
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.remainingMinor = remainingMinor
+    }
+}
+
+public struct GetSupportContextResponseCustomerOption1: Codable, Sendable, Equatable {
+    public var referredBy: GetSupportContextResponseCustomerOption1ReferredByOption1?
+    public var attributedAt: String?
+    public var rewardState: GetSupportContextResponseCustomerOption1RewardStateOption1?
+    /// Integer minor units (cents).
+    public var commissionsMinor: Int
+    public var currency: String?
+
+    enum CodingKeys: String, CodingKey {
+        case referredBy = "referredBy"
+        case attributedAt = "attributedAt"
+        case rewardState = "rewardState"
+        case commissionsMinor = "commissionsMinor"
+        case currency = "currency"
+    }
+
+    public init(referredBy: GetSupportContextResponseCustomerOption1ReferredByOption1? = nil, attributedAt: String? = nil, rewardState: GetSupportContextResponseCustomerOption1RewardStateOption1? = nil, commissionsMinor: Int, currency: String? = nil) {
+        self.referredBy = referredBy
+        self.attributedAt = attributedAt
+        self.rewardState = rewardState
+        self.commissionsMinor = commissionsMinor
+        self.currency = currency
+    }
+}
+
+public struct GetSupportContextResponseLinks: Codable, Sendable, Equatable {
+    public var dashboard: String
+    public var partner: String?
+    public var referral: String?
+
+    enum CodingKeys: String, CodingKey {
+        case dashboard = "dashboard"
+        case partner = "partner"
+        case referral = "referral"
+    }
+
+    public init(dashboard: String, partner: String? = nil, referral: String? = nil) {
+        self.dashboard = dashboard
+        self.partner = partner
+        self.referral = referral
+    }
+}
+
+public struct GetSupportContextResponse: Codable, Sendable, Equatable {
+    public var partner: GetSupportContextResponsePartnerOption1?
+    public var customer: GetSupportContextResponseCustomerOption1?
+    public var links: GetSupportContextResponseLinks
+
+    enum CodingKeys: String, CodingKey {
+        case partner = "partner"
+        case customer = "customer"
+        case links = "links"
+    }
+
+    public init(partner: GetSupportContextResponsePartnerOption1? = nil, customer: GetSupportContextResponseCustomerOption1? = nil, links: GetSupportContextResponseLinks) {
+        self.partner = partner
+        self.customer = customer
+        self.links = links
+    }
+}
+
+public struct GetSupportAppsResponseValueItemInstall: Codable, Sendable, Equatable {
+    public var kind: String?
+    public var steps: [String]
+    public var manifestPath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case steps = "steps"
+        case manifestPath = "manifestPath"
+    }
+
+    public init(kind: String? = nil, steps: [String], manifestPath: String? = nil) {
+        self.kind = kind
+        self.steps = steps
+        self.manifestPath = manifestPath
+    }
+}
+
+public struct GetSupportAppsResponseValueItemConfigOption1: Codable, Sendable, Equatable {
+    public var subdomain: JSONValue
+    public var cardKey: JSONValue
+    public var hasPublicKey: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case subdomain = "subdomain"
+        case cardKey = "cardKey"
+        case hasPublicKey = "hasPublicKey"
+    }
+
+    public init(subdomain: JSONValue, cardKey: JSONValue, hasPublicKey: Bool) {
+        self.subdomain = subdomain
+        self.cardKey = cardKey
+        self.hasPublicKey = hasPublicKey
+    }
+}
+
+public struct GetSupportAppsResponseValueItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var status: String
+    public var docsUrl: String
+    public var vendorDocsUrl: String
+    public var secretSource: String
+    public var install: GetSupportAppsResponseValueItemInstall
+    public var cardUrl: String
+    public var enabled: Bool
+    public var configured: Bool
+    public var config: GetSupportAppsResponseValueItemConfigOption1?
+    public var lastOkAt: String?
+    public var lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case status = "status"
+        case docsUrl = "docsUrl"
+        case vendorDocsUrl = "vendorDocsUrl"
+        case secretSource = "secretSource"
+        case install = "install"
+        case cardUrl = "cardUrl"
+        case enabled = "enabled"
+        case configured = "configured"
+        case config = "config"
+        case lastOkAt = "lastOkAt"
+        case lastError = "lastError"
+    }
+
+    public init(id: String, name: String, status: String, docsUrl: String, vendorDocsUrl: String, secretSource: String, install: GetSupportAppsResponseValueItemInstall, cardUrl: String, enabled: Bool, configured: Bool, config: GetSupportAppsResponseValueItemConfigOption1? = nil, lastOkAt: String? = nil, lastError: String? = nil) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.docsUrl = docsUrl
+        self.vendorDocsUrl = vendorDocsUrl
+        self.secretSource = secretSource
+        self.install = install
+        self.cardUrl = cardUrl
+        self.enabled = enabled
+        self.configured = configured
+        self.config = config
+        self.lastOkAt = lastOkAt
+        self.lastError = lastError
+    }
+}
+
+public typealias GetSupportAppsResponse = [GetSupportAppsResponseValueItem]
+
+public struct PutSupportAppsAdapterResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var enabled: Bool
+    public var cardUrl: String
+    public var secret: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case enabled = "enabled"
+        case cardUrl = "cardUrl"
+        case secret = "secret"
+    }
+
+    public init(adapter: String, enabled: Bool, cardUrl: String, secret: String? = nil) {
+        self.adapter = adapter
+        self.enabled = enabled
+        self.cardUrl = cardUrl
+        self.secret = secret
+    }
+}
+
+public struct DeleteSupportAppsAdapterResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+    }
+
+    public init(ok: Bool) {
+        self.ok = ok
+    }
+}
+
+public struct PostSupportAppsAdapterTestResponse: Codable, Sendable, Equatable {
+    public var found: Bool
+    public var context: GetSupportContextResponse?
+    public var rendered: JSONValue
+
+    enum CodingKeys: String, CodingKey {
+        case found = "found"
+        case context = "context"
+        case rendered = "rendered"
+    }
+
+    public init(found: Bool, context: GetSupportContextResponse? = nil, rendered: JSONValue) {
+        self.found = found
+        self.context = context
+        self.rendered = rendered
+    }
+}
+
+public typealias PostSupportCardsOrgIdAdapterResponse = [String: JSONValue]
+
+public struct GetPrivacyExecutorsResponseValueItemInstall: Codable, Sendable, Equatable {
+    public var kind: String?
+    public var steps: [String]
+    public var manifestPath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case steps = "steps"
+        case manifestPath = "manifestPath"
+    }
+
+    public init(kind: String? = nil, steps: [String], manifestPath: String? = nil) {
+        self.kind = kind
+        self.steps = steps
+        self.manifestPath = manifestPath
+    }
+}
+
+public struct GetPrivacyExecutorsResponseValueItemConfigOption1: Codable, Sendable, Equatable {
+    public var hasPublicKey: Bool
+    public var algorithm: String?
+    public var sombraUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case hasPublicKey = "hasPublicKey"
+        case algorithm = "algorithm"
+        case sombraUrl = "sombraUrl"
+    }
+
+    public init(hasPublicKey: Bool, algorithm: String? = nil, sombraUrl: String? = nil) {
+        self.hasPublicKey = hasPublicKey
+        self.algorithm = algorithm
+        self.sombraUrl = sombraUrl
+    }
+}
+
+public struct GetPrivacyExecutorsResponseValueItemHealth: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public var detail: String
+    public var fix: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case detail = "detail"
+        case fix = "fix"
+    }
+
+    public init(ok: Bool, detail: String, fix: String? = nil) {
+        self.ok = ok
+        self.detail = detail
+        self.fix = fix
+    }
+}
+
+public struct GetPrivacyExecutorsResponseValueItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var status: String
+    public var docsUrl: String
+    public var vendorDocsUrl: String
+    public var keyKind: String
+    public var install: GetPrivacyExecutorsResponseValueItemInstall
+    public var url: String
+    public var enabled: Bool
+    public var hasKey: Bool
+    public var hasVendorSecret: Bool
+    public var config: GetPrivacyExecutorsResponseValueItemConfigOption1?
+    public var health: GetPrivacyExecutorsResponseValueItemHealth
+    public var lastOkAt: String?
+    public var lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case status = "status"
+        case docsUrl = "docsUrl"
+        case vendorDocsUrl = "vendorDocsUrl"
+        case keyKind = "keyKind"
+        case install = "install"
+        case url = "url"
+        case enabled = "enabled"
+        case hasKey = "hasKey"
+        case hasVendorSecret = "hasVendorSecret"
+        case config = "config"
+        case health = "health"
+        case lastOkAt = "lastOkAt"
+        case lastError = "lastError"
+    }
+
+    public init(id: String, name: String, status: String, docsUrl: String, vendorDocsUrl: String, keyKind: String, install: GetPrivacyExecutorsResponseValueItemInstall, url: String, enabled: Bool, hasKey: Bool, hasVendorSecret: Bool, config: GetPrivacyExecutorsResponseValueItemConfigOption1? = nil, health: GetPrivacyExecutorsResponseValueItemHealth, lastOkAt: String? = nil, lastError: String? = nil) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.docsUrl = docsUrl
+        self.vendorDocsUrl = vendorDocsUrl
+        self.keyKind = keyKind
+        self.install = install
+        self.url = url
+        self.enabled = enabled
+        self.hasKey = hasKey
+        self.hasVendorSecret = hasVendorSecret
+        self.config = config
+        self.health = health
+        self.lastOkAt = lastOkAt
+        self.lastError = lastError
+    }
+}
+
+public typealias GetPrivacyExecutorsResponse = [GetPrivacyExecutorsResponseValueItem]
+
+public struct PostPrivacyExecutorKeysResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var url: String
+    public var enabled: Bool
+    public var key: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case url = "url"
+        case enabled = "enabled"
+        case key = "key"
+    }
+
+    public init(adapter: String, url: String, enabled: Bool, key: String? = nil) {
+        self.adapter = adapter
+        self.url = url
+        self.enabled = enabled
+        self.key = key
+    }
+}
+
+public struct DeletePrivacyExecutorsAdapterResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+    }
+
+    public init(ok: Bool) {
+        self.ok = ok
+    }
+}
+
+public struct PostPrivacyExecutorsAdapterCheckResponse: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var ok: Bool
+    public var detail: String
+    public var fix: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case ok = "ok"
+        case detail = "detail"
+        case fix = "fix"
+    }
+
+    public init(adapter: String, ok: Bool, detail: String, fix: String? = nil) {
+        self.adapter = adapter
+        self.ok = ok
+        self.detail = detail
+        self.fix = fix
+    }
+}
+
+public struct GetPrivacyExecutorRequestsResponseValueItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var adapter: String
+    public var vendorRequestId: String?
+    public var op: String
+    public var status: String
+    public var createdAt: String
+    public var completedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case adapter = "adapter"
+        case vendorRequestId = "vendorRequestId"
+        case op = "op"
+        case status = "status"
+        case createdAt = "createdAt"
+        case completedAt = "completedAt"
+    }
+
+    public init(id: String, adapter: String, vendorRequestId: String? = nil, op: String, status: String, createdAt: String, completedAt: String? = nil) {
+        self.id = id
+        self.adapter = adapter
+        self.vendorRequestId = vendorRequestId
+        self.op = op
+        self.status = status
+        self.createdAt = createdAt
+        self.completedAt = completedAt
+    }
+}
+
+public typealias GetPrivacyExecutorRequestsResponse = [GetPrivacyExecutorRequestsResponseValueItem]
+
+public struct PostAccountCloseResponse: Codable, Sendable, Equatable {
+    public var closed: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case closed = "closed"
+    }
+
+    public init(closed: Bool) {
+        self.closed = closed
+    }
+}
+
+public struct GetClicksConsentCoverageResponse: Codable, Sendable, Equatable {
+    public var days: Int
+    public var since: String
+    /// Attributed (non-void) sign-ups in the window.
+    public var attributed: Int
+    /// Of those, how many have consent evidence on their click or association.
+    public var withEvidence: Int
+    /// withEvidence / attributed, 4 decimals; null with no sign-ups.
+    public var share: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case days = "days"
+        case since = "since"
+        case attributed = "attributed"
+        case withEvidence = "withEvidence"
+        case share = "share"
+    }
+
+    public init(days: Int, since: String, attributed: Int, withEvidence: Int, share: Double? = nil) {
+        self.days = days
+        self.since = since
+        self.attributed = attributed
+        self.withEvidence = withEvidence
+        self.share = share
+    }
+}
+
+public struct GetClicksIdResponseConsentOption1: Codable, Sendable, Equatable {
+    public var provider: String
+    public var state: String
+    public var at: String?
+    public var stamp: String?
+    public var tcString: String?
+    public var gppString: String?
+    public var purposes: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case provider = "provider"
+        case state = "state"
+        case at = "at"
+        case stamp = "stamp"
+        case tcString = "tcString"
+        case gppString = "gppString"
+        case purposes = "purposes"
+    }
+
+    public init(provider: String, state: String, at: String? = nil, stamp: String? = nil, tcString: String? = nil, gppString: String? = nil, purposes: [String]? = nil) {
+        self.provider = provider
+        self.state = state
+        self.at = at
+        self.stamp = stamp
+        self.tcString = tcString
+        self.gppString = gppString
+        self.purposes = purposes
+    }
+}
+
+public struct GetClicksIdResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    public var partnerId: String
+    public var linkId: String?
+    public var ts: String
+    public var source: String
+    public var eligible: Bool
+    public var fraudScore: Int
+    public var anonId: String?
+    /// The visitor's consent when the click was stored (a redirect click: from the first consented visit).
+    public var consent: GetClicksIdResponseConsentOption1?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case partnerId = "partnerId"
+        case linkId = "linkId"
+        case ts = "ts"
+        case source = "source"
+        case eligible = "eligible"
+        case fraudScore = "fraudScore"
+        case anonId = "anonId"
+        case consent = "consent"
+    }
+
+    public init(id: String, programId: String, partnerId: String, linkId: String? = nil, ts: String, source: String, eligible: Bool, fraudScore: Int, anonId: String? = nil, consent: GetClicksIdResponseConsentOption1? = nil) {
+        self.id = id
+        self.programId = programId
+        self.partnerId = partnerId
+        self.linkId = linkId
+        self.ts = ts
+        self.source = source
+        self.eligible = eligible
+        self.fraudScore = fraudScore
+        self.anonId = anonId
+        self.consent = consent
+    }
+}
+
+public struct GetOrgTrackingConsentResponseAdaptersItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var defaultCategory: String?
+    public var status: String
+    public var docsUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case defaultCategory = "defaultCategory"
+        case status = "status"
+        case docsUrl = "docsUrl"
+    }
+
+    public init(id: String, name: String, defaultCategory: String? = nil, status: String, docsUrl: String) {
+        self.id = id
+        self.name = name
+        self.defaultCategory = defaultCategory
+        self.status = status
+        self.docsUrl = docsUrl
+    }
+}
+
+public struct GetOrgTrackingConsentResponse: Codable, Sendable, Equatable {
+    /// `auto`, `none`, `pending` or a consent adapter id.
+    public var mode: String
+    public var noCmp: String?
+    public var category: String?
+    public var tcfVendorId: Int?
+    public var gcmSignal: String?
+    /// False for an org that never chose (its tag behaves as before: `none`).
+    public var configured: Bool
+    public var adapters: [GetOrgTrackingConsentResponseAdaptersItem]
+
+    enum CodingKeys: String, CodingKey {
+        case mode = "mode"
+        case noCmp = "noCmp"
+        case category = "category"
+        case tcfVendorId = "tcfVendorId"
+        case gcmSignal = "gcmSignal"
+        case configured = "configured"
+        case adapters = "adapters"
+    }
+
+    public init(mode: String, noCmp: String? = nil, category: String? = nil, tcfVendorId: Int? = nil, gcmSignal: String? = nil, configured: Bool, adapters: [GetOrgTrackingConsentResponseAdaptersItem]) {
+        self.mode = mode
+        self.noCmp = noCmp
+        self.category = category
+        self.tcfVendorId = tcfVendorId
+        self.gcmSignal = gcmSignal
+        self.configured = configured
+        self.adapters = adapters
+    }
+}
+
+public struct GetOrgHostedPagesResponseConsent: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var config: [String: JSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+    }
+
+    public init(adapter: String, config: [String: JSONValue]) {
+        self.adapter = adapter
+        self.config = config
+    }
+}
+
+public struct GetOrgHostedPagesResponseChatOption1: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var config: [String: JSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+    }
+
+    public init(adapter: String, config: [String: JSONValue]) {
+        self.adapter = adapter
+        self.config = config
+    }
+}
+
+public struct GetOrgHostedPagesResponseServedConsentTagsItem: Codable, Sendable, Equatable {
+    public var tag: String
+    public var attrs: [String: JSONValue]
+    public var inline: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tag = "tag"
+        case attrs = "attrs"
+        case inline = "inline"
+    }
+
+    public init(tag: String, attrs: [String: JSONValue], inline: String? = nil) {
+        self.tag = tag
+        self.attrs = attrs
+        self.inline = inline
+    }
+}
+
+public struct GetOrgHostedPagesResponseServedConsentSettingsLinkOption1: Codable, Sendable, Equatable {
+    public var call: String?
+    public var attrs: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case call = "call"
+        case attrs = "attrs"
+    }
+
+    public init(call: String? = nil, attrs: [String: String]? = nil) {
+        self.call = call
+        self.attrs = attrs
+    }
+}
+
+public struct GetOrgHostedPagesResponseServedConsentBuiltin: Codable, Sendable, Equatable {
+    public var policyUrl: String
+    public var text: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case policyUrl = "policyUrl"
+        case text = "text"
+    }
+
+    public init(policyUrl: String, text: [String: String]? = nil) {
+        self.policyUrl = policyUrl
+        self.text = text
+    }
+}
+
+public struct GetOrgHostedPagesResponseServedConsent: Codable, Sendable, Equatable {
+    public var mode: String
+    public var provider: String
+    public var tags: [GetOrgHostedPagesResponseServedConsentTagsItem]
+    public var settingsLink: GetOrgHostedPagesResponseServedConsentSettingsLinkOption1?
+    public var builtin: GetOrgHostedPagesResponseServedConsentBuiltin?
+
+    enum CodingKeys: String, CodingKey {
+        case mode = "mode"
+        case provider = "provider"
+        case tags = "tags"
+        case settingsLink = "settingsLink"
+        case builtin = "builtin"
+    }
+
+    public init(mode: String, provider: String, tags: [GetOrgHostedPagesResponseServedConsentTagsItem], settingsLink: GetOrgHostedPagesResponseServedConsentSettingsLinkOption1? = nil, builtin: GetOrgHostedPagesResponseServedConsentBuiltin? = nil) {
+        self.mode = mode
+        self.provider = provider
+        self.tags = tags
+        self.settingsLink = settingsLink
+        self.builtin = builtin
+    }
+}
+
+public struct GetOrgHostedPagesResponseServedChatOption1TagsItem: Codable, Sendable, Equatable {
+    public var tag: String
+    public var attrs: [String: JSONValue]
+    public var inline: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tag = "tag"
+        case attrs = "attrs"
+        case inline = "inline"
+    }
+
+    public init(tag: String, attrs: [String: JSONValue], inline: String? = nil) {
+        self.tag = tag
+        self.attrs = attrs
+        self.inline = inline
+    }
+}
+
+public struct GetOrgHostedPagesResponseServedChatOption1: Codable, Sendable, Equatable {
+    public var provider: String
+    public var tags: [GetOrgHostedPagesResponseServedChatOption1TagsItem]
+
+    enum CodingKeys: String, CodingKey {
+        case provider = "provider"
+        case tags = "tags"
+    }
+
+    public init(provider: String, tags: [GetOrgHostedPagesResponseServedChatOption1TagsItem]) {
+        self.provider = provider
+        self.tags = tags
+    }
+}
+
+public struct GetOrgHostedPagesResponseServed: Codable, Sendable, Equatable {
+    public var consent: GetOrgHostedPagesResponseServedConsent
+    public var chat: GetOrgHostedPagesResponseServedChatOption1?
+    /// The Content-Security-Policy for this host's pages, built from the enabled adapters.
+    public var csp: String
+
+    enum CodingKeys: String, CodingKey {
+        case consent = "consent"
+        case chat = "chat"
+        case csp = "csp"
+    }
+
+    public init(consent: GetOrgHostedPagesResponseServedConsent, chat: GetOrgHostedPagesResponseServedChatOption1? = nil, csp: String) {
+        self.consent = consent
+        self.chat = chat
+        self.csp = csp
+    }
+}
+
+public struct GetOrgHostedPagesResponseAdaptersConsentItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var status: String
+    public var docsUrl: String
+    public var vendorDocsUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case status = "status"
+        case docsUrl = "docsUrl"
+        case vendorDocsUrl = "vendorDocsUrl"
+    }
+
+    public init(id: String, name: String, status: String, docsUrl: String, vendorDocsUrl: String) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.docsUrl = docsUrl
+        self.vendorDocsUrl = vendorDocsUrl
+    }
+}
+
+public struct GetOrgHostedPagesResponseAdaptersChatItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var status: String
+    public var docsUrl: String
+    public var vendorDocsUrl: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case status = "status"
+        case docsUrl = "docsUrl"
+        case vendorDocsUrl = "vendorDocsUrl"
+    }
+
+    public init(id: String, name: String, status: String, docsUrl: String, vendorDocsUrl: String) {
+        self.id = id
+        self.name = name
+        self.status = status
+        self.docsUrl = docsUrl
+        self.vendorDocsUrl = vendorDocsUrl
+    }
+}
+
+public struct GetOrgHostedPagesResponseAdapters: Codable, Sendable, Equatable {
+    public var consent: [GetOrgHostedPagesResponseAdaptersConsentItem]
+    public var chat: [GetOrgHostedPagesResponseAdaptersChatItem]
+
+    enum CodingKeys: String, CodingKey {
+        case consent = "consent"
+        case chat = "chat"
+    }
+
+    public init(consent: [GetOrgHostedPagesResponseAdaptersConsentItem], chat: [GetOrgHostedPagesResponseAdaptersChatItem]) {
+        self.consent = consent
+        self.chat = chat
+    }
+}
+
+public struct GetOrgHostedPagesResponse: Codable, Sendable, Equatable {
+    public var consent: GetOrgHostedPagesResponseConsent
+    public var chat: GetOrgHostedPagesResponseChatOption1?
+    public var customOrigins: [String: [String]]
+    public var status: String
+    public var lastOkAt: String?
+    public var lastError: String?
+    public var served: GetOrgHostedPagesResponseServed
+    public var adapters: GetOrgHostedPagesResponseAdapters
+
+    enum CodingKeys: String, CodingKey {
+        case consent = "consent"
+        case chat = "chat"
+        case customOrigins = "customOrigins"
+        case status = "status"
+        case lastOkAt = "lastOkAt"
+        case lastError = "lastError"
+        case served = "served"
+        case adapters = "adapters"
+    }
+
+    public init(consent: GetOrgHostedPagesResponseConsent, chat: GetOrgHostedPagesResponseChatOption1? = nil, customOrigins: [String: [String]], status: String, lastOkAt: String? = nil, lastError: String? = nil, served: GetOrgHostedPagesResponseServed, adapters: GetOrgHostedPagesResponseAdapters) {
+        self.consent = consent
+        self.chat = chat
+        self.customOrigins = customOrigins
+        self.status = status
+        self.lastOkAt = lastOkAt
+        self.lastError = lastError
+        self.served = served
+        self.adapters = adapters
+    }
+}
+
+public struct PostOrgHostedPagesCheckResponseChecksItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var ok: Bool
+    public var detail: String
+    public var fix: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case ok = "ok"
+        case detail = "detail"
+        case fix = "fix"
+    }
+
+    public init(id: String, ok: Bool, detail: String, fix: String? = nil) {
+        self.id = id
+        self.ok = ok
+        self.detail = detail
+        self.fix = fix
+    }
+}
+
+public struct PostOrgHostedPagesCheckResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public var checks: [PostOrgHostedPagesCheckResponseChecksItem]
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case checks = "checks"
+    }
+
+    public init(ok: Bool, checks: [PostOrgHostedPagesCheckResponseChecksItem]) {
+        self.ok = ok
+        self.checks = checks
+    }
+}
+
 public struct PostWebhooksBillingConnectionIdResponseResultsItem: Codable, Sendable, Equatable {
     public var duplicate: Bool
     public var billingEventId: String?
     public var conversions: Int
     public var linesCreated: Int
     public var reversals: Int
+    /// Recorded as ignored_by_filter: earned nothing.
+    public var ignored: String?
 
     enum CodingKeys: String, CodingKey {
         case duplicate = "duplicate"
@@ -14371,14 +16725,16 @@ public struct PostWebhooksBillingConnectionIdResponseResultsItem: Codable, Senda
         case conversions = "conversions"
         case linesCreated = "linesCreated"
         case reversals = "reversals"
+        case ignored = "ignored"
     }
 
-    public init(duplicate: Bool, billingEventId: String? = nil, conversions: Int, linesCreated: Int, reversals: Int) {
+    public init(duplicate: Bool, billingEventId: String? = nil, conversions: Int, linesCreated: Int, reversals: Int, ignored: String? = nil) {
         self.duplicate = duplicate
         self.billingEventId = billingEventId
         self.conversions = conversions
         self.linesCreated = linesCreated
         self.reversals = reversals
+        self.ignored = ignored
     }
 }
 
@@ -14551,6 +16907,126 @@ public struct PostWebhooksStripeBillingResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostApiPrivacyLookupResponse: Codable, Sendable, Equatable {
+    public var subjectId: String?
+    public var status: String
+
+    enum CodingKeys: String, CodingKey {
+        case subjectId = "subjectId"
+        case status = "status"
+    }
+
+    public init(subjectId: String? = nil, status: String) {
+        self.subjectId = subjectId
+        self.status = status
+    }
+}
+
+public struct PostApiPrivacyRequestsResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var status: String
+    public var eta: String?
+    public var detail: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case status = "status"
+        case eta = "eta"
+        case detail = "detail"
+    }
+
+    public init(id: String, status: String, eta: String? = nil, detail: String? = nil) {
+        self.id = id
+        self.status = status
+        self.eta = eta
+        self.detail = detail
+    }
+}
+
+public struct GetApiPrivacyRequestsIdResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var type: String
+    public var status: String
+    public var eta: String?
+    public var detail: String?
+    public var result: GetOpenapiJsonResponse?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case type = "type"
+        case status = "status"
+        case eta = "eta"
+        case detail = "detail"
+        case result = "result"
+    }
+
+    public init(id: String, type: String, status: String, eta: String? = nil, detail: String? = nil, result: GetOpenapiJsonResponse? = nil) {
+        self.id = id
+        self.type = type
+        self.status = status
+        self.eta = eta
+        self.detail = detail
+        self.result = result
+    }
+}
+
+public struct PostApiPrivacyOrgsOrgIdLookupResponse: Codable, Sendable, Equatable {
+    public var subjectId: String?
+    public var status: String
+
+    enum CodingKeys: String, CodingKey {
+        case subjectId = "subjectId"
+        case status = "status"
+    }
+
+    public init(subjectId: String? = nil, status: String) {
+        self.subjectId = subjectId
+        self.status = status
+    }
+}
+
+public struct PostApiPrivacyOrgsOrgIdRequestsResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var status: String
+    public var detail: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case status = "status"
+        case detail = "detail"
+    }
+
+    public init(id: String, status: String, detail: String? = nil) {
+        self.id = id
+        self.status = status
+        self.detail = detail
+    }
+}
+
+public struct GetApiPrivacyOrgsOrgIdRequestsIdResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var type: String
+    public var status: String
+    public var detail: String?
+    public var result: PostSupportCardsOrgIdAdapterResponse?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case type = "type"
+        case status = "status"
+        case detail = "detail"
+        case result = "result"
+    }
+
+    public init(id: String, type: String, status: String, detail: String? = nil, result: PostSupportCardsOrgIdAdapterResponse? = nil) {
+        self.id = id
+        self.type = type
+        self.status = status
+        self.detail = detail
+        self.result = result
+    }
+}
+
 public struct GetGraphqlResponse: Codable, Sendable, Equatable {
     public var data: GetOpenapiJsonResponse?
     public var errors: [GetOpenapiJsonResponse]?
@@ -14611,6 +17087,18 @@ public struct PostAgentsRegisterBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostAuthBackchannelLogoutBody: Codable, Sendable, Equatable {
+    public var logoutToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case logoutToken = "logout_token"
+    }
+
+    public init(logoutToken: String) {
+        self.logoutToken = logoutToken
+    }
+}
+
 public struct PostOrgsBody: Codable, Sendable, Equatable {
     public var name: String
 
@@ -14620,6 +17108,81 @@ public struct PostOrgsBody: Codable, Sendable, Equatable {
 
     public init(name: String) {
         self.name = name
+    }
+}
+
+public struct PutOrgPortalAuthBodyOption1: Codable, Sendable, Equatable {
+    public var adapter: String
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+    }
+
+    public init(adapter: String) {
+        self.adapter = adapter
+    }
+}
+
+public struct PutOrgPortalAuthBodyOption2: Codable, Sendable, Equatable {
+    public var issuer: String
+    public var clientId: String
+    public var clientSecret: String?
+    public var scopes: String?
+    public var name: String?
+    public var trustEmailVerified: Bool?
+    public var adapter: String
+    public var autoEnrollProgramId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case issuer = "issuer"
+        case clientId = "clientId"
+        case clientSecret = "clientSecret"
+        case scopes = "scopes"
+        case name = "name"
+        case trustEmailVerified = "trustEmailVerified"
+        case adapter = "adapter"
+        case autoEnrollProgramId = "autoEnrollProgramId"
+    }
+
+    public init(issuer: String, clientId: String, clientSecret: String? = nil, scopes: String? = nil, name: String? = nil, trustEmailVerified: Bool? = nil, adapter: String, autoEnrollProgramId: String? = nil) {
+        self.issuer = issuer
+        self.clientId = clientId
+        self.clientSecret = clientSecret
+        self.scopes = scopes
+        self.name = name
+        self.trustEmailVerified = trustEmailVerified
+        self.adapter = adapter
+        self.autoEnrollProgramId = autoEnrollProgramId
+    }
+}
+
+public struct PutOrgPortalAuthBodyOption3: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var issuer: String
+    public var jwksUrl: String
+    public var trustEmailVerified: Bool?
+    public var autoEnrollProgramId: String?
+    public var name: String?
+    public var loginUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case issuer = "issuer"
+        case jwksUrl = "jwksUrl"
+        case trustEmailVerified = "trustEmailVerified"
+        case autoEnrollProgramId = "autoEnrollProgramId"
+        case name = "name"
+        case loginUrl = "loginUrl"
+    }
+
+    public init(adapter: String, issuer: String, jwksUrl: String, trustEmailVerified: Bool? = nil, autoEnrollProgramId: String? = nil, name: String? = nil, loginUrl: String? = nil) {
+        self.adapter = adapter
+        self.issuer = issuer
+        self.jwksUrl = jwksUrl
+        self.trustEmailVerified = trustEmailVerified
+        self.autoEnrollProgramId = autoEnrollProgramId
+        self.name = name
+        self.loginUrl = loginUrl
     }
 }
 
@@ -15670,6 +18233,39 @@ public struct PostWidgetTokensBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostReferralsAssociateBodyConsent: Codable, Sendable, Equatable {
+    /// The adapter that read it (`onetrust`, `tcf`, `cookiemunch`, …), `custom` for `aff.consent()`, `none`, or `no-cmp`.
+    public var provider: String
+    public var state: String
+    /// When the tracker read it.
+    public var at: String?
+    /// The CMP's consent record id, when it has one.
+    public var stamp: String?
+    public var tcString: String?
+    public var gppString: String?
+    public var purposes: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case provider = "provider"
+        case state = "state"
+        case at = "at"
+        case stamp = "stamp"
+        case tcString = "tcString"
+        case gppString = "gppString"
+        case purposes = "purposes"
+    }
+
+    public init(provider: String, state: String, at: String? = nil, stamp: String? = nil, tcString: String? = nil, gppString: String? = nil, purposes: [String]? = nil) {
+        self.provider = provider
+        self.state = state
+        self.at = at
+        self.stamp = stamp
+        self.tcString = tcString
+        self.gppString = gppString
+        self.purposes = purposes
+    }
+}
+
 public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
     public var programId: String
     public var customerRef: String
@@ -15682,6 +18278,7 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
     public var idempotencyKey: String?
     public var occurredAt: String?
     public var emailDomain: String?
+    public var consent: PostReferralsAssociateBodyConsent?
 
     enum CodingKeys: String, CodingKey {
         case programId = "programId"
@@ -15695,9 +18292,10 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
         case idempotencyKey = "idempotencyKey"
         case occurredAt = "occurredAt"
         case emailDomain = "emailDomain"
+        case consent = "consent"
     }
 
-    public init(programId: String, customerRef: String, anonId: String? = nil, referralToken: String? = nil, couponCode: String? = nil, emailHash: String? = nil, ip: String? = nil, ua: String? = nil, idempotencyKey: String? = nil, occurredAt: String? = nil, emailDomain: String? = nil) {
+    public init(programId: String, customerRef: String, anonId: String? = nil, referralToken: String? = nil, couponCode: String? = nil, emailHash: String? = nil, ip: String? = nil, ua: String? = nil, idempotencyKey: String? = nil, occurredAt: String? = nil, emailDomain: String? = nil, consent: PostReferralsAssociateBodyConsent? = nil) {
         self.programId = programId
         self.customerRef = customerRef
         self.anonId = anonId
@@ -15709,6 +18307,7 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
         self.idempotencyKey = idempotencyKey
         self.occurredAt = occurredAt
         self.emailDomain = emailDomain
+        self.consent = consent
     }
 }
 
@@ -16195,21 +18794,45 @@ public struct PostCommissionsIdSettleBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostBillingConnectionsBodyFilter: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+    public var productIds: [String]?
+    public var priceIds: [String]?
+    public var skus: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+        case productIds = "productIds"
+        case priceIds = "priceIds"
+        case skus = "skus"
+    }
+
+    public init(metadata: [String: String]? = nil, productIds: [String]? = nil, priceIds: [String]? = nil, skus: [String]? = nil) {
+        self.metadata = metadata
+        self.productIds = productIds
+        self.priceIds = priceIds
+        self.skus = skus
+    }
+}
+
 public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
     public var provider: String
     public var name: String?
     public var webhookSecret: String?
+    public var filter: PostBillingConnectionsBodyFilter?
 
     enum CodingKeys: String, CodingKey {
         case provider = "provider"
         case name = "name"
         case webhookSecret = "webhookSecret"
+        case filter = "filter"
     }
 
-    public init(provider: String, name: String? = nil, webhookSecret: String? = nil) {
+    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil) {
         self.provider = provider
         self.name = name
         self.webhookSecret = webhookSecret
+        self.filter = filter
     }
 }
 
@@ -16246,18 +18869,42 @@ public struct PutBillingConnectionsIdCredentialsBody: Codable, Sendable, Equatab
     }
 }
 
+public struct PatchBillingConnectionsIdBodyFilterOption1: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+    public var productIds: [String]?
+    public var priceIds: [String]?
+    public var skus: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+        case productIds = "productIds"
+        case priceIds = "priceIds"
+        case skus = "skus"
+    }
+
+    public init(metadata: [String: String]? = nil, productIds: [String]? = nil, priceIds: [String]? = nil, skus: [String]? = nil) {
+        self.metadata = metadata
+        self.productIds = productIds
+        self.priceIds = priceIds
+        self.skus = skus
+    }
+}
+
 public struct PatchBillingConnectionsIdBody: Codable, Sendable, Equatable {
     public var status: String?
     public var name: String?
+    public var filter: PatchBillingConnectionsIdBodyFilterOption1?
 
     enum CodingKeys: String, CodingKey {
         case status = "status"
         case name = "name"
+        case filter = "filter"
     }
 
-    public init(status: String? = nil, name: String? = nil) {
+    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil) {
         self.status = status
         self.name = name
+        self.filter = filter
     }
 }
 
@@ -16330,6 +18977,21 @@ public struct PostBillingConnectionsIdValueMappingPreviewBody: Codable, Sendable
         self.payload = payload
         self.currency = currency
         self.mapping = mapping
+    }
+}
+
+public struct PostBillingInternalCustomersBody: Codable, Sendable, Equatable {
+    public var customerRef: String
+    public var note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case note = "note"
+    }
+
+    public init(customerRef: String, note: String? = nil) {
+        self.customerRef = customerRef
+        self.note = note
     }
 }
 
@@ -16654,15 +19316,110 @@ public struct PostRoiPatternsPatternReviewBody: Codable, Sendable, Equatable {
     }
 }
 
-/// Up to 500 value events; each is validated and recorded on its own.
+public struct PostValueEventsBodyEventsItem: Codable, Sendable, Equatable {
+    public var kind: String
+    /// Your id for the customer. One of customerRef, partnerId or partnerExternalRef is required.
+    public var customerRef: String?
+    /// A Referalli partner id.
+    public var partnerId: String?
+    /// Your id for the partner (the partner's externalRef).
+    public var partnerExternalRef: String?
+    /// The credit grant this event draws on.
+    public var creditGrantId: String?
+    /// The referral it belongs to.
+    public var referralId: String?
+    /// The program it belongs to.
+    public var programId: String?
+    /// Your product or plan id.
+    public var productRef: String?
+    /// ISO 4217 code.
+    public var currency: String
+    /// Cash paid (a refund is stored negative). Integer minor units.
+    public var cashMinor: Int?
+    /// Credit applied to this payment. Integer minor units.
+    public var creditAppliedMinor: Int?
+    /// Discount given. Integer minor units.
+    public var discountMinor: Int?
+    /// Tax included. Integer minor units.
+    public var taxMinor: Int?
+    /// Payment fees. Integer minor units.
+    public var feesMinor: Int?
+    /// Cost to you (cost events). Integer minor units.
+    public var costMinor: Int?
+    /// Face value of the credit (required for credit_granted). Integer minor units.
+    public var faceMinor: Int?
+    /// Your idempotency id for this fact: the same externalId is recorded once.
+    public var externalId: String
+    /// Your invoice id.
+    public var invoiceRef: String?
+    /// Where the fact came from (stripe, your billing system…).
+    public var provider: String?
+    /// ISO 8601 date or date-time.
+    public var occurredAt: String
+    /// credit_granted only: who received the credit.
+    public var role: String?
+    public var metadata: [String: JSONValue]?
+
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case customerRef = "customerRef"
+        case partnerId = "partnerId"
+        case partnerExternalRef = "partnerExternalRef"
+        case creditGrantId = "creditGrantId"
+        case referralId = "referralId"
+        case programId = "programId"
+        case productRef = "productRef"
+        case currency = "currency"
+        case cashMinor = "cashMinor"
+        case creditAppliedMinor = "creditAppliedMinor"
+        case discountMinor = "discountMinor"
+        case taxMinor = "taxMinor"
+        case feesMinor = "feesMinor"
+        case costMinor = "costMinor"
+        case faceMinor = "faceMinor"
+        case externalId = "externalId"
+        case invoiceRef = "invoiceRef"
+        case provider = "provider"
+        case occurredAt = "occurredAt"
+        case role = "role"
+        case metadata = "metadata"
+    }
+
+    public init(kind: String, customerRef: String? = nil, partnerId: String? = nil, partnerExternalRef: String? = nil, creditGrantId: String? = nil, referralId: String? = nil, programId: String? = nil, productRef: String? = nil, currency: String, cashMinor: Int? = nil, creditAppliedMinor: Int? = nil, discountMinor: Int? = nil, taxMinor: Int? = nil, feesMinor: Int? = nil, costMinor: Int? = nil, faceMinor: Int? = nil, externalId: String, invoiceRef: String? = nil, provider: String? = nil, occurredAt: String, role: String? = nil, metadata: [String: JSONValue]? = nil) {
+        self.kind = kind
+        self.customerRef = customerRef
+        self.partnerId = partnerId
+        self.partnerExternalRef = partnerExternalRef
+        self.creditGrantId = creditGrantId
+        self.referralId = referralId
+        self.programId = programId
+        self.productRef = productRef
+        self.currency = currency
+        self.cashMinor = cashMinor
+        self.creditAppliedMinor = creditAppliedMinor
+        self.discountMinor = discountMinor
+        self.taxMinor = taxMinor
+        self.feesMinor = feesMinor
+        self.costMinor = costMinor
+        self.faceMinor = faceMinor
+        self.externalId = externalId
+        self.invoiceRef = invoiceRef
+        self.provider = provider
+        self.occurredAt = occurredAt
+        self.role = role
+        self.metadata = metadata
+    }
+}
+
+/// Up to 500 value events; each is validated and recorded on its own, so one bad event is reported in `errors` and the rest are recorded.
 public struct PostValueEventsBody: Codable, Sendable, Equatable {
-    public var events: [JSONValue]
+    public var events: [PostValueEventsBodyEventsItem]
 
     enum CodingKeys: String, CodingKey {
         case events = "events"
     }
 
-    public init(events: [JSONValue]) {
+    public init(events: [PostValueEventsBodyEventsItem]) {
         self.events = events
     }
 }
@@ -16796,19 +19553,22 @@ public struct PostWebhookEndpointsBody: Codable, Sendable, Equatable {
     public var topics: [String]?
     public var legacySignature: Bool?
     public var programIds: [String]?
+    public var alertContacts: [String]?
 
     enum CodingKeys: String, CodingKey {
         case url = "url"
         case topics = "topics"
         case legacySignature = "legacySignature"
         case programIds = "programIds"
+        case alertContacts = "alertContacts"
     }
 
-    public init(url: String, topics: [String]? = nil, legacySignature: Bool? = nil, programIds: [String]? = nil) {
+    public init(url: String, topics: [String]? = nil, legacySignature: Bool? = nil, programIds: [String]? = nil, alertContacts: [String]? = nil) {
         self.url = url
         self.topics = topics
         self.legacySignature = legacySignature
         self.programIds = programIds
+        self.alertContacts = alertContacts
     }
 }
 
@@ -16818,6 +19578,7 @@ public struct PatchWebhookEndpointsIdBody: Codable, Sendable, Equatable {
     public var topics: [String]?
     public var legacySignature: Bool?
     public var programIds: [String]?
+    public var alertContacts: [String]?
 
     enum CodingKeys: String, CodingKey {
         case status = "status"
@@ -16825,14 +19586,16 @@ public struct PatchWebhookEndpointsIdBody: Codable, Sendable, Equatable {
         case topics = "topics"
         case legacySignature = "legacySignature"
         case programIds = "programIds"
+        case alertContacts = "alertContacts"
     }
 
-    public init(status: String? = nil, url: String? = nil, topics: [String]? = nil, legacySignature: Bool? = nil, programIds: [String]? = nil) {
+    public init(status: String? = nil, url: String? = nil, topics: [String]? = nil, legacySignature: Bool? = nil, programIds: [String]? = nil, alertContacts: [String]? = nil) {
         self.status = status
         self.url = url
         self.topics = topics
         self.legacySignature = legacySignature
         self.programIds = programIds
+        self.alertContacts = alertContacts
     }
 }
 
@@ -17221,6 +19984,42 @@ public struct PutProgramsIdRefereeRewardBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostRewardsBody: Codable, Sendable, Equatable {
+    public var partnerId: String?
+    public var partnerExternalRef: String?
+    public var reason: String
+    public var amountMinor: Int?
+    public var currency: String?
+    public var ruleKey: String?
+    public var event: String?
+    public var programId: String?
+    public var idempotencyKey: String
+
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partnerId"
+        case partnerExternalRef = "partnerExternalRef"
+        case reason = "reason"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case ruleKey = "ruleKey"
+        case event = "event"
+        case programId = "programId"
+        case idempotencyKey = "idempotencyKey"
+    }
+
+    public init(partnerId: String? = nil, partnerExternalRef: String? = nil, reason: String, amountMinor: Int? = nil, currency: String? = nil, ruleKey: String? = nil, event: String? = nil, programId: String? = nil, idempotencyKey: String) {
+        self.partnerId = partnerId
+        self.partnerExternalRef = partnerExternalRef
+        self.reason = reason
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.ruleKey = ruleKey
+        self.event = event
+        self.programId = programId
+        self.idempotencyKey = idempotencyKey
+    }
+}
+
 public struct PostRewardsRedeemByCodeBody: Codable, Sendable, Equatable {
     public var amountMinor: Int?
     public var billingEventId: String?
@@ -17269,6 +20068,34 @@ public struct PostRewardsIdRedeemBody: Codable, Sendable, Equatable {
         self.invoiceRef = invoiceRef
         self.externalId = externalId
         self.occurredAt = occurredAt
+    }
+}
+
+public struct PutRewardsRulesKeyBody: Codable, Sendable, Equatable {
+    /// An inbound event this rule rewards, e.g. community.answer_accepted. Unique per org.
+    public var event: String?
+    public var programId: String?
+    public var amountMinor: Int
+    public var currency: String?
+    public var reason: String
+    public var enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case event = "event"
+        case programId = "programId"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case reason = "reason"
+        case enabled = "enabled"
+    }
+
+    public init(event: String? = nil, programId: String? = nil, amountMinor: Int, currency: String? = nil, reason: String, enabled: Bool? = nil) {
+        self.event = event
+        self.programId = programId
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.reason = reason
+        self.enabled = enabled
     }
 }
 
@@ -18172,6 +20999,18 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutAuthConnectionsIdSecretBody: Codable, Sendable, Equatable {
+    public var secret: String
+
+    enum CodingKeys: String, CodingKey {
+        case secret = "secret"
+    }
+
+    public init(secret: String) {
+        self.secret = secret
+    }
+}
+
 public struct PatchAuthConnectionsIdBody: Codable, Sendable, Equatable {
     public var status: String?
     public var name: String?
@@ -18304,6 +21143,27 @@ public struct PostAuthConnectionsIdSignupsBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostAuthConnectionsIdPartnersBody: Codable, Sendable, Equatable {
+    public var customerRef: String
+    public var email: String
+    public var name: String?
+    public var code: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case email = "email"
+        case name = "name"
+        case code = "code"
+    }
+
+    public init(customerRef: String, email: String, name: String? = nil, code: String? = nil) {
+        self.customerRef = customerRef
+        self.email = email
+        self.name = name
+        self.code = code
+    }
+}
+
 public struct PostAuthConnectionsIdEraseBody: Codable, Sendable, Equatable {
     public var customerRef: String
 
@@ -18373,6 +21233,63 @@ public struct PostAuthConnectionsIdSignalsBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostAuthConnectionsInstallBody: Codable, Sendable, Equatable {
+    public var clientId: String
+    public var scope: String
+    public var redirectUri: String
+    public var state: String?
+    public var codeChallenge: String
+    public var instanceId: String
+    public var programId: String?
+    public var decision: String
+
+    enum CodingKeys: String, CodingKey {
+        case clientId = "clientId"
+        case scope = "scope"
+        case redirectUri = "redirectUri"
+        case state = "state"
+        case codeChallenge = "codeChallenge"
+        case instanceId = "instanceId"
+        case programId = "programId"
+        case decision = "decision"
+    }
+
+    public init(clientId: String, scope: String, redirectUri: String, state: String? = nil, codeChallenge: String, instanceId: String, programId: String? = nil, decision: String) {
+        self.clientId = clientId
+        self.scope = scope
+        self.redirectUri = redirectUri
+        self.state = state
+        self.codeChallenge = codeChallenge
+        self.instanceId = instanceId
+        self.programId = programId
+        self.decision = decision
+    }
+}
+
+public struct PostOauthTokenBody: Codable, Sendable, Equatable {
+    public var grantType: String
+    public var code: String
+    public var codeVerifier: String
+    public var clientId: String
+    public var redirectUri: String
+
+    enum CodingKeys: String, CodingKey {
+        case grantType = "grant_type"
+        case code = "code"
+        case codeVerifier = "code_verifier"
+        case clientId = "client_id"
+        case redirectUri = "redirect_uri"
+    }
+
+    public init(grantType: String, code: String, codeVerifier: String, clientId: String, redirectUri: String) {
+        self.grantType = grantType
+        self.code = code
+        self.codeVerifier = codeVerifier
+        self.clientId = clientId
+        self.redirectUri = redirectUri
+    }
+}
+
 public struct PatchOrgSsoBody: Codable, Sendable, Equatable {
     public var requireSso: Bool?
     public var roleMapping: [String: String]?
@@ -18397,6 +21314,81 @@ public struct PostOrgSsoTicketsBody: Codable, Sendable, Equatable {
 
     public init(expiresInDays: Int? = nil) {
         self.expiresInDays = expiresInDays
+    }
+}
+
+public struct PutOrgSsoDirectBodyOption1: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var issuer: String
+    public var clientId: String
+    public var clientSecret: String?
+    public var scopes: String?
+    public var roleClaim: String?
+    public var name: String?
+    public var domains: [String]?
+    public var roleMapping: [String: String]?
+    public var defaultRole: String?
+    public var trustEmailVerified: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case issuer = "issuer"
+        case clientId = "clientId"
+        case clientSecret = "clientSecret"
+        case scopes = "scopes"
+        case roleClaim = "roleClaim"
+        case name = "name"
+        case domains = "domains"
+        case roleMapping = "roleMapping"
+        case defaultRole = "defaultRole"
+        case trustEmailVerified = "trustEmailVerified"
+    }
+
+    public init(adapter: String, issuer: String, clientId: String, clientSecret: String? = nil, scopes: String? = nil, roleClaim: String? = nil, name: String? = nil, domains: [String]? = nil, roleMapping: [String: String]? = nil, defaultRole: String? = nil, trustEmailVerified: Bool? = nil) {
+        self.adapter = adapter
+        self.issuer = issuer
+        self.clientId = clientId
+        self.clientSecret = clientSecret
+        self.scopes = scopes
+        self.roleClaim = roleClaim
+        self.name = name
+        self.domains = domains
+        self.roleMapping = roleMapping
+        self.defaultRole = defaultRole
+        self.trustEmailVerified = trustEmailVerified
+    }
+}
+
+public struct PutOrgSsoDirectBodyOption2: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var clientId: String
+    public var apiKey: String?
+    public var organizationId: String
+    public var domains: [String]?
+    public var roleMapping: [String: String]?
+    public var defaultRole: String?
+    public var trustEmailVerified: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case clientId = "clientId"
+        case apiKey = "apiKey"
+        case organizationId = "organizationId"
+        case domains = "domains"
+        case roleMapping = "roleMapping"
+        case defaultRole = "defaultRole"
+        case trustEmailVerified = "trustEmailVerified"
+    }
+
+    public init(adapter: String, clientId: String, apiKey: String? = nil, organizationId: String, domains: [String]? = nil, roleMapping: [String: String]? = nil, defaultRole: String? = nil, trustEmailVerified: Bool? = nil) {
+        self.adapter = adapter
+        self.clientId = clientId
+        self.apiKey = apiKey
+        self.organizationId = organizationId
+        self.domains = domains
+        self.roleMapping = roleMapping
+        self.defaultRole = defaultRole
+        self.trustEmailVerified = trustEmailVerified
     }
 }
 
@@ -18463,6 +21455,202 @@ public struct PostPublicProgramsHandleJoinBody: Codable, Sendable, Equatable {
 
     public init(destinationUrl: String? = nil) {
         self.destinationUrl = destinationUrl
+    }
+}
+
+public struct PutSupportAppsAdapterBodyConfig: Codable, Sendable, Equatable {
+    public var publicKeyPem: String?
+    public var subdomain: String?
+    public var cardKey: String?
+
+    enum CodingKeys: String, CodingKey {
+        case publicKeyPem = "publicKeyPem"
+        case subdomain = "subdomain"
+        case cardKey = "cardKey"
+    }
+
+    public init(publicKeyPem: String? = nil, subdomain: String? = nil, cardKey: String? = nil) {
+        self.publicKeyPem = publicKeyPem
+        self.subdomain = subdomain
+        self.cardKey = cardKey
+    }
+}
+
+public struct PutSupportAppsAdapterBody: Codable, Sendable, Equatable {
+    public var enabled: Bool?
+    /// The vendor-issued signing secret (Chatly, Intercom, HubSpot, Front, Help Scout). Write-only.
+    public var secret: String?
+    /// custom: mint a new secret (shown once).
+    public var rotate: Bool?
+    public var config: PutSupportAppsAdapterBodyConfig?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case secret = "secret"
+        case rotate = "rotate"
+        case config = "config"
+    }
+
+    public init(enabled: Bool? = nil, secret: String? = nil, rotate: Bool? = nil, config: PutSupportAppsAdapterBodyConfig? = nil) {
+        self.enabled = enabled
+        self.secret = secret
+        self.rotate = rotate
+        self.config = config
+    }
+}
+
+public struct PostSupportAppsAdapterTestBody: Codable, Sendable, Equatable {
+    /// Used only when no stronger key is given.
+    public var email: String?
+    public var customerRef: String?
+    public var partnerExternalRef: String?
+    /// A support tool's verified external id: matched as a partner externalRef, then as a customer ref.
+    public var ext: String?
+
+    enum CodingKeys: String, CodingKey {
+        case email = "email"
+        case customerRef = "customerRef"
+        case partnerExternalRef = "partnerExternalRef"
+        case ext = "ext"
+    }
+
+    public init(email: String? = nil, customerRef: String? = nil, partnerExternalRef: String? = nil, ext: String? = nil) {
+        self.email = email
+        self.customerRef = customerRef
+        self.partnerExternalRef = partnerExternalRef
+        self.ext = ext
+    }
+}
+
+public struct PostPrivacyExecutorKeysBodyConfig: Codable, Sendable, Equatable {
+    public var publicKeyPem: String?
+    public var algorithm: String?
+    public var sombraUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case publicKeyPem = "publicKeyPem"
+        case algorithm = "algorithm"
+        case sombraUrl = "sombraUrl"
+    }
+
+    public init(publicKeyPem: String? = nil, algorithm: String? = nil, sombraUrl: String? = nil) {
+        self.publicKeyPem = publicKeyPem
+        self.algorithm = algorithm
+        self.sombraUrl = sombraUrl
+    }
+}
+
+public struct PostPrivacyExecutorKeysBody: Codable, Sendable, Equatable {
+    public var adapter: String
+    /// A credential from the vendor (Transcend API key, Osano webhook secret). Write-only.
+    public var vendorSecret: String?
+    public var config: PostPrivacyExecutorKeysBodyConfig?
+    /// Mint a new executor key (the old one stops working). false keeps the current key and only updates the settings.
+    public var rotate: Bool?
+    public var enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case vendorSecret = "vendorSecret"
+        case config = "config"
+        case rotate = "rotate"
+        case enabled = "enabled"
+    }
+
+    public init(adapter: String, vendorSecret: String? = nil, config: PostPrivacyExecutorKeysBodyConfig? = nil, rotate: Bool? = nil, enabled: Bool? = nil) {
+        self.adapter = adapter
+        self.vendorSecret = vendorSecret
+        self.config = config
+        self.rotate = rotate
+        self.enabled = enabled
+    }
+}
+
+public struct PostAccountCloseBody: Codable, Sendable, Equatable {
+    /// The account's email address, typed out, to confirm.
+    public var confirm: String
+
+    enum CodingKeys: String, CodingKey {
+        case confirm = "confirm"
+    }
+
+    public init(confirm: String) {
+        self.confirm = confirm
+    }
+}
+
+public struct PutOrgTrackingConsentBody: Codable, Sendable, Equatable {
+    /// `auto` detects the CMP, `none` always stores, `pending` waits for `aff.consent()`, or an adapter id.
+    public var mode: String
+    /// The CMP category, group, purpose or service to require (each adapter has a default).
+    public var category: String?
+    public var tcfVendorId: Int?
+    public var gcmSignal: String?
+    /// `auto` with no CMP on the page: `persist` stores, `memory` never does.
+    public var noCmp: String?
+
+    enum CodingKeys: String, CodingKey {
+        case mode = "mode"
+        case category = "category"
+        case tcfVendorId = "tcfVendorId"
+        case gcmSignal = "gcmSignal"
+        case noCmp = "noCmp"
+    }
+
+    public init(mode: String, category: String? = nil, tcfVendorId: Int? = nil, gcmSignal: String? = nil, noCmp: String? = nil) {
+        self.mode = mode
+        self.category = category
+        self.tcfVendorId = tcfVendorId
+        self.gcmSignal = gcmSignal
+        self.noCmp = noCmp
+    }
+}
+
+public struct PutOrgHostedPagesBodyConsent: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var config: [String: JSONValue]?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+    }
+
+    public init(adapter: String, config: [String: JSONValue]? = nil) {
+        self.adapter = adapter
+        self.config = config
+    }
+}
+
+public struct PutOrgHostedPagesBodyChatOption1: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var config: [String: JSONValue]?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case config = "config"
+    }
+
+    public init(adapter: String, config: [String: JSONValue]? = nil) {
+        self.adapter = adapter
+        self.config = config
+    }
+}
+
+public struct PutOrgHostedPagesBody: Codable, Sendable, Equatable {
+    public var consent: PutOrgHostedPagesBodyConsent
+    public var chat: PutOrgHostedPagesBodyChatOption1?
+    public var customOrigins: [String: [String]]?
+
+    enum CodingKeys: String, CodingKey {
+        case consent = "consent"
+        case chat = "chat"
+        case customOrigins = "customOrigins"
+    }
+
+    public init(consent: PutOrgHostedPagesBodyConsent, chat: PutOrgHostedPagesBodyChatOption1? = nil, customOrigins: [String: [String]]? = nil) {
+        self.consent = consent
+        self.chat = chat
+        self.customOrigins = customOrigins
     }
 }
 

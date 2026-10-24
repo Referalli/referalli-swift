@@ -18,6 +18,9 @@ public final class AuthenticationError: APIError, @unchecked Sendable {}
 /// `step_up_required` (HTTP 401).
 public final class StepUpRequiredError: APIError, @unchecked Sendable {}
 
+/// `reauth_required` (HTTP 401).
+public final class ReauthRequiredError: APIError, @unchecked Sendable {}
+
 /// `payment_required` (HTTP 402).
 public final class PaymentRequiredError: APIError, @unchecked Sendable {}
 
@@ -88,6 +91,7 @@ extension APIError {
         "bad_request": BadRequestError.self,
         "unauthorized": AuthenticationError.self,
         "step_up_required": StepUpRequiredError.self,
+        "reauth_required": ReauthRequiredError.self,
         "payment_required": PaymentRequiredError.self,
         "forbidden": PermissionDeniedError.self,
         "webhooks_disabled": WebhooksDisabledError.self,

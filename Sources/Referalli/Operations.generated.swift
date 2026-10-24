@@ -44,6 +44,15 @@ extension ReferalliClient {
         return try await send("DELETE", "/v1/billing/connections/\(Self.segment(id))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Remove an internal customer. DELETE /v1/billing/internal-customers/{customerRef}
+    ///
+    /// Their payments earn again from now on (events already ignored stay ignored). Audited.
+    ///
+    /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
+    public func deleteBillingInternalCustomersCustomerRef(customerRef: String, idempotencyKey: String? = nil) async throws -> Ok {
+        return try await send("DELETE", "/v1/billing/internal-customers/\(Self.segment(customerRef))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Remove the portal domain. DELETE /v1/branding/domain
     ///
     /// Stops serving the partner portal on the custom domain.
@@ -98,6 +107,15 @@ extension ReferalliClient {
         return try await send("DELETE", "/v1/org/members/\(Self.segment(userId))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Remove your identity provider. DELETE /v1/org/sso/direct
+    ///
+    /// Removes the org's own IdP configuration; team SSO and "require SSO" turn off, so nobody is locked out. Owner only.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`.
+    public func deleteOrgSsoDirect(idempotencyKey: String? = nil) async throws -> DeleteOrgSsoDirectResponse {
+        return try await send("DELETE", "/v1/org/sso/direct", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Delete a partner. DELETE /v1/partners/{id}
     ///
     /// Deletes a partner that never did anything, with its enrollments, links, coupons and payout profile. A partner with any clicks, referrals, commissions, payouts or other history is `409`: archive it instead (`status: "archived"`). Audited.
@@ -116,6 +134,15 @@ extension ReferalliClient {
         return try await send("DELETE", "/v1/payout-connections/\(Self.segment(provider))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Disconnect a DSAR tool. DELETE /v1/privacy/executors/{adapter}
+    ///
+    /// Removes the tool, its key and settings; its URL answers 404 from now on. The request log stays.
+    ///
+    /// **Auth:** an API key with `privacy:write` (or `full`), or a session with role `owner`, `admin`.
+    public func deletePrivacyExecutorsAdapter(adapter: String, idempotencyKey: String? = nil) async throws -> DeletePrivacyExecutorsAdapterResponse {
+        return try await send("DELETE", "/v1/privacy/executors/\(Self.segment(adapter))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Delete a product margin. DELETE /v1/profitability/products/{productRef}
     ///
     /// Removes a product from the margin catalog; its payments fall back to the program or org margin. Audited.
@@ -123,6 +150,24 @@ extension ReferalliClient {
     /// **Auth:** an API key with `analytics:write` (or `full`), or a session with role `owner`, `admin`.
     public func deleteProfitabilityProductsProductRef(productRef: String, idempotencyKey: String? = nil) async throws -> OkStatus {
         return try await send("DELETE", "/v1/profitability/products/\(Self.segment(productRef))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Delete a reward rule. DELETE /v1/rewards/rules/{key}
+    ///
+    /// Deletes the rule. Rewards already granted through it stay.
+    ///
+    /// **Auth:** an API key with `commissions:write` (or `full`), or a session with role `owner`, `admin`.
+    public func deleteRewardsRulesKey(key: String, idempotencyKey: String? = nil) async throws -> DeleteRewardsRulesKeyResponse {
+        return try await send("DELETE", "/v1/rewards/rules/\(Self.segment(key))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Disconnect a support tool. DELETE /v1/support/apps/{adapter}
+    ///
+    /// Removes the tool and its secret; its card URL answers 404 from now on.
+    ///
+    /// **Auth:** an API key with `partners:write` (or `full`), or a session with role `owner`, `admin`.
+    public func deleteSupportAppsAdapter(adapter: String, idempotencyKey: String? = nil) async throws -> DeleteSupportAppsAdapterResponse {
+        return try await send("DELETE", "/v1/support/apps/\(Self.segment(adapter))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Delete a webhook endpoint. DELETE /v1/webhook-endpoints/{id}
@@ -460,6 +505,15 @@ extension ReferalliClient {
         return try await send("GET", "/v1/auth/connections/\(Self.segment(id))/export", query: [("customerRef", Self.queryString(customerRef))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// List identity connectors. GET /v1/auth/connections/providers
+    ///
+    /// Every auth provider you can connect (Atlas, Clerk, Auth0, Supabase, Firebase, Cognito, Stytch, Kinde, WorkOS, generic, your own auth), with how it connects, who issues the secret, the setup steps, a copyable template where the vendor has no native webhook, and where the referral metadata lands.
+    ///
+    /// **Auth:** an API key with `integrations:read` (or `full`), or a session of any role.
+    public func getAuthConnectionsProviders(idempotencyKey: String? = nil) async throws -> GetAuthConnectionsProvidersResponse {
+        return try await send("GET", "/v1/auth/connections/providers", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// List sign-in providers. GET /v1/auth/providers
     ///
     /// The identity providers configured on this deployment, for rendering sign-in buttons.
@@ -500,7 +554,7 @@ extension ReferalliClient {
 
     /// List billing events. GET /v1/billing/events
     ///
-    /// Payments, refunds and other billing events received from every connection, newest first. Filter with `customerRef`.
+    /// Payments, refunds and other billing events received from every connection, newest first. Filter with `customerRef`, or `status=ignored_by_filter` for the events a product filter or the internal-customer list set aside (recorded, never processed).
     ///
     /// **Auth:** an API key with `billing:read` (or `full`), or a session of any role.
     ///
@@ -509,13 +563,22 @@ extension ReferalliClient {
     /// ending_before: A cursor: returns the items before this item id (the previous page). Not with `starting_after`. From API version 2026-11-01; ignored under 2026-10-21, where lists are a capped plain array.
     /// created[gte]: Only items created at or after this time (ISO 8601), on lists of timestamped records. From API version 2026-11-01; ignored under 2026-10-21, where lists are a capped plain array.
     /// created[lte]: Only items created at or before this time (ISO 8601), on lists of timestamped records. From API version 2026-11-01; ignored under 2026-10-21, where lists are a capped plain array.
-    public func getBillingEvents(customerRef: String? = nil, limit: Int? = nil, startingAfter: String? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) async throws -> Page<BillingEvent> {
-        return try await send("GET", "/v1/billing/events", query: [("customerRef", Self.queryString(customerRef)), ("limit", Self.queryString(limit)), ("starting_after", Self.queryString(startingAfter)), ("ending_before", Self.queryString(endingBefore)), ("created[gte]", Self.queryString(createdGte)), ("created[lte]", Self.queryString(createdLte))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    public func getBillingEvents(customerRef: String? = nil, status: String? = nil, limit: Int? = nil, startingAfter: String? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) async throws -> Page<BillingEvent> {
+        return try await send("GET", "/v1/billing/events", query: [("customerRef", Self.queryString(customerRef)), ("status", Self.queryString(status)), ("limit", Self.queryString(limit)), ("starting_after", Self.queryString(startingAfter)), ("ending_before", Self.queryString(endingBefore)), ("created[gte]", Self.queryString(createdGte)), ("created[lte]", Self.queryString(createdLte))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Every item of `getBillingEvents`, following the pages.
-    public func getBillingEventsEach(customerRef: String? = nil, limit: Int? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) -> AsyncThrowingStream<BillingEvent, Swift.Error> {
-        paginate { cursor in try await self.getBillingEvents(customerRef: customerRef, limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
+    public func getBillingEventsEach(customerRef: String? = nil, status: String? = nil, limit: Int? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) -> AsyncThrowingStream<BillingEvent, Swift.Error> {
+        paginate { cursor in try await self.getBillingEvents(customerRef: customerRef, status: status, limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
+    }
+
+    /// List internal customers. GET /v1/billing/internal-customers
+    ///
+    /// The org's own customers (staff, test accounts, your own plans) whose payments never earn on any connection. Metadata `planSource: "internal"` on the provider's customer does the same without a list.
+    ///
+    /// **Auth:** an API key with `billing:read` (or `full`), or a session of any role.
+    public func getBillingInternalCustomers(idempotencyKey: String? = nil) async throws -> [InternalCustomer] {
+        return try await send("GET", "/v1/billing/internal-customers", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Get the plan. GET /v1/billing/plan
@@ -529,11 +592,20 @@ extension ReferalliClient {
 
     /// Get branding. GET /v1/branding
     ///
-    /// The org's logo, theme tokens, sender address, and its custom portal and link domains with their status (`none`, `pending` DNS, `provisioning` a certificate, `active`).
+    /// The org's logo, theme tokens, sender address, and its custom portal and link domains with their status (`none`, `pending` DNS, `provisioning` a certificate, `active`), and `warnings` for theme colour pairs below WCAG AA contrast.
     ///
     /// **Auth:** an API key with `org:read` (or `full`), or a session of any role.
     public func getBranding(idempotencyKey: String? = nil) async throws -> GetBrandingResponse {
         return try await send("GET", "/v1/branding", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Get the support-chat identity. GET /v1/chatly/identity
+    ///
+    /// The signed-in merchant user or partner as a Chatly widget identity: `externalId` (`merchant:<id>` or `partner:<id>`), email, name and `userHash`, the HMAC-SHA256 of `externalId` with Referalli's identity secret. `identity` is null when signed out or when identity verification isn't configured. Never cached.
+    ///
+    /// **Auth:** none.
+    public func getChatlyIdentity(idempotencyKey: String? = nil) async throws -> GetChatlyIdentityResponse {
+        return try await send("GET", "/v1/chatly/identity", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Get a customer's consent. GET /v1/cleanroom/consent
@@ -552,6 +624,26 @@ extension ReferalliClient {
     /// **Auth:** an API key with `growth:read` (or `full`), or a session of any role.
     public func getCleanroomQuery(dimension: String, idempotencyKey: String? = nil) async throws -> GetCleanroomQueryResponse {
         return try await send("GET", "/v1/cleanroom/query", query: [("dimension", Self.queryString(dimension))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Get consent coverage. GET /v1/clicks/consent-coverage
+    ///
+    /// The share of attributed sign-ups in the last `days` (default 30) whose referral carries consent evidence, on its click or on the `associate` call. Low coverage means sign-ups are attributed from tags without a consent setting (`none`) or from server-side calls that don't pass `consent`.
+    ///
+    /// **Auth:** an API key with `links:read` (or `full`), or a session of any role.
+    ///
+    /// days: Look-back window in days.
+    public func getClicksConsentCoverage(days: Int? = nil, idempotencyKey: String? = nil) async throws -> GetClicksConsentCoverageResponse {
+        return try await send("GET", "/v1/clicks/consent-coverage", query: [("days", Self.queryString(days))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Get a click. GET /v1/clicks/{id}
+    ///
+    /// One click with its consent evidence: what the visitor's CMP said when the tracker stored the referral (`consent.provider`, `state`, `stamp`, `tcString`…). A redirect click (`/go`) is recorded before the landing page reads the CMP, so its evidence comes from the first consented visit beacon naming it. `consent` is null when none arrived.
+    ///
+    /// **Auth:** an API key with `links:read` (or `full`), or a session of any role.
+    public func getClicksId(id: String, idempotencyKey: String? = nil) async throws -> GetClicksIdResponse {
+        return try await send("GET", "/v1/clicks/\(Self.segment(id))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Get a pending CLI sign-in. GET /v1/cli/device-codes/{userCode}
@@ -779,6 +871,17 @@ extension ReferalliClient {
         paginate { cursor in try await self.getEmailTemplates(limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
     }
 
+    /// Get one org's embed manifest. GET /v1/embed
+    ///
+    /// The embed manifest for the org that owns `token` (its public tracking token): its link domain in the CSP origins, its longest program cookie window as the storage lifetime, and its consent default. Public, CORS `*`.
+    ///
+    /// **Auth:** none.
+    ///
+    /// token: The org's public tracking token.
+    public func getEmbed(token: String, idempotencyKey: String? = nil) async throws -> GetWellKnownForgedeckEmbedJsonResponse {
+        return try await send("GET", "/v1/embed", query: [("token", Self.queryString(token))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Read embedded partner stats. GET /v1/embed/summary
     ///
     /// Called by the embed component with `Authorization: Bearer <embed token>`: the partner's name, eligible clicks, active referrals, balances and link codes. 401 for a missing, invalid or expired token.
@@ -786,6 +889,19 @@ extension ReferalliClient {
     /// **Auth:** none.
     public func getEmbedSummary(idempotencyKey: String? = nil) async throws -> GetEmbedSummaryResponse {
         return try await send("GET", "/v1/embed/summary", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// List past events. GET /v1/events
+    ///
+    /// The org's events, oldest first, in the shape webhook deliveries carry: filter with `since` and `topics`, page with `after` (the previous page's `nextCursor`). Every event is listed whether or not an endpoint subscribed to it. `referalli events tail --since 1h` uses it to backfill before tailing live.
+    ///
+    /// **Auth:** an API key with `webhooks:read` (or `full`), or a session of any role.
+    ///
+    /// since: Only events created at or after this time.
+    /// topics: Comma-separated topics (default: every topic).
+    /// after: The `nextCursor` of the previous page: events after this one.
+    public func getEvents(since: String? = nil, topics: String? = nil, after: String? = nil, limit: Int? = nil, idempotencyKey: String? = nil) async throws -> GetEventsResponse {
+        return try await send("GET", "/v1/events", query: [("since", Self.queryString(since)), ("topics", Self.queryString(topics)), ("after", Self.queryString(after)), ("limit", Self.queryString(limit))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Export payouts for accounting. GET /v1/export/accounting
@@ -889,6 +1005,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `analytics:read` (or `full`), or a session of any role.
     public func getIncrementality(programId: String, idempotencyKey: String? = nil) async throws -> GetIncrementalityResponse {
         return try await send("GET", "/v1/incrementality", query: [("programId", Self.queryString(programId))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Check integration health. GET /v1/integration-health
+    ///
+    /// Every connection the org depends on, each with `ok`, a `detail`, and when it fails a `fix` and `docs` link: billing connections (and when each last received an event), sign-up connections, the tracking snippet (a visit in the last 30 days), payout connections, outbound webhook endpoints, and every adapter of a connected port. `hop` names the leg that failed on a path between systems. `ok` at the top is true only when every check is.
+    ///
+    /// **Auth:** an API key with `integrations:read` (or `full`), or a session of any role.
+    public func getIntegrationHealth(idempotencyKey: String? = nil) async throws -> GetIntegrationHealthResponse {
+        return try await send("GET", "/v1/integration-health", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// List integrations. GET /v1/integrations
@@ -1113,6 +1238,15 @@ extension ReferalliClient {
         return try await send("GET", "/v1/org/fx-feed", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Get the hosted-page consent and chat. GET /v1/org/hosted-pages
+    ///
+    /// What runs on the pages Referalli hosts for you on your own portal domain (the partner portal and `/join`): your consent banner (Cookie Munch, OneTrust, Cookiebot, Usercentrics, Didomi, Osano, Termly, iubenda, a custom CMP, a built-in necessary-only notice, or none) and your support chat (Chatly, Intercom, Crisp or custom). `served` is exactly what visitors get: the head tags, the "Cookie settings" link and the Content-Security-Policy built from these adapters. Referalli's own banner and chat never run on your domain.
+    ///
+    /// **Auth:** an API key with `org:read` (or `full`), or a session of any role.
+    public func getOrgHostedPages(idempotencyKey: String? = nil) async throws -> GetOrgHostedPagesResponse {
+        return try await send("GET", "/v1/org/hosted-pages", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// List team members. GET /v1/org/members
     ///
     /// Members of the org with their role and email, oldest first.
@@ -1140,6 +1274,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `payouts:read` (or `full`), or a session of any role.
     public func getOrgPayoutSchedule(idempotencyKey: String? = nil) async throws -> GetOrgPayoutScheduleResponse {
         return try await send("GET", "/v1/org/payout-schedule", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Get partner sign-in settings. GET /v1/org/portal-auth
+    ///
+    /// How partners sign in to the org's portal: `referalli` (partner accounts, the default), `oidc` (the merchant's IdP) or `custom` (the merchant's own session, as a short-lived JWT). Includes the audience tokens must carry, the URL to send partners to, the redirect URI to register, and the last check. Never the secret.
+    ///
+    /// **Auth:** an API key with `org:read` (or `full`), or a session with role `owner`, `admin`.
+    public func getOrgPortalAuth(idempotencyKey: String? = nil) async throws -> GetOrgPortalAuthResponse {
+        return try await send("GET", "/v1/org/portal-auth", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Get referral query parameters. GET /v1/org/referral-params
@@ -1185,6 +1328,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `org:read` (or `full`), or a session with role `owner`, `admin`, `finance`.
     public func getOrgTaxProfile(idempotencyKey: String? = nil) async throws -> TaxProfile {
         return try await send("GET", "/v1/org/tax-profile", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Get the tracker's consent default. GET /v1/org/tracking-consent
+    ///
+    /// How `aff.js` reads visitor consent unless the tag says otherwise (`data-consent`): `auto` detects the site's CMP (Cookie Munch, OneTrust, Cookiebot, Usercentrics, Didomi, Osano, Termly, IAB TCF and GPP, Google Consent Mode, or `window.referalliConsent`), an adapter id pins one, `pending` waits for `aff.consent(true|false)`, and `none` always stores. Until consent is granted nothing is stored or sent; the referral stays in memory for the sign-up. `noCmp` is what `auto` does on a site without a CMP. `configured: false` is an org that never chose: it serves `none`, so existing tags behave as before. Lists the adapters with their default category.
+    ///
+    /// **Auth:** an API key with `org:read` (or `full`), or a session of any role.
+    public func getOrgTrackingConsent(idempotencyKey: String? = nil) async throws -> GetOrgTrackingConsentResponse {
+        return try await send("GET", "/v1/org/tracking-consent", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// List outreach messages. GET /v1/outreach
@@ -1838,6 +1990,42 @@ extension ReferalliClient {
         return try await send("GET", "/v1/payouts/\(Self.segment(id))/invoice", query: [("format", Self.queryString(format))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// List public plans. GET /v1/plans
+    ///
+    /// The public plan catalog in display order: monthly price in minor units (USD, billed monthly in advance), limits and features. No authentication; cacheable for an hour. No plan charges a transaction or payout fee.
+    ///
+    /// **Auth:** none.
+    public func getPlans(idempotencyKey: String? = nil) async throws -> GetPlansResponse {
+        return try await send("GET", "/v1/plans", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// What a merchant's portal sign-in offers. GET /v1/portal-auth/current
+    ///
+    /// For the portal's sign-in page: the org (from `org`, or the merchant's portal domain this is called on) and its partner sign-in adapter, with the button label and where it starts. `referalli` with no start URL when the org uses Referalli partner accounts.
+    ///
+    /// **Auth:** none.
+    public func getPortalAuthCurrent(org: String? = nil, idempotencyKey: String? = nil) async throws -> GetPortalAuthCurrentResponse {
+        return try await send("GET", "/v1/portal-auth/current", query: [("org", Self.queryString(org))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// List DSAR tool requests. GET /v1/privacy/executor-requests
+    ///
+    /// The last 200 requests connected DSAR tools sent: operation, outcome and the vendor request id. Subjects are kept only as hashes.
+    ///
+    /// **Auth:** an API key with `privacy:read` (or `full`), or a session with role `owner`, `admin`.
+    public func getPrivacyExecutorRequests(idempotencyKey: String? = nil) async throws -> GetPrivacyExecutorRequestsResponse {
+        return try await send("GET", "/v1/privacy/executor-requests", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// List connected DSAR tools. GET /v1/privacy/executors
+    ///
+    /// Every DSAR tool that can reach Referalli as a connected system (Cookie Munch cm-standard-v1, OneTrust, Transcend, DataGrail, Ketch, Osano, `custom` for any tool speaking Standard Webhooks), with the per-org URL to register, install steps and a health check. Keys are never returned.
+    ///
+    /// **Auth:** an API key with `privacy:read` (or `full`), or a session with role `owner`, `admin`.
+    public func getPrivacyExecutors(idempotencyKey: String? = nil) async throws -> GetPrivacyExecutorsResponse {
+        return try await send("GET", "/v1/privacy/executors", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Export a customer's data. GET /v1/privacy/export
     ///
     /// Every stored row that references the customer, for a data-subject access request.
@@ -2186,6 +2374,15 @@ extension ReferalliClient {
         paginate { cursor in try await self.getRewards(status: status, limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
     }
 
+    /// List partner rewards. GET /v1/rewards/granted
+    ///
+    /// The last 200 rewards granted through `POST /v1/rewards`, with the commission line each one posted.
+    ///
+    /// **Auth:** an API key with `commissions:read` (or `full`), or a session of any role.
+    public func getRewardsGranted(idempotencyKey: String? = nil) async throws -> GetRewardsGrantedResponse {
+        return try await send("GET", "/v1/rewards/granted", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Look up a reward code. GET /v1/rewards/lookup/{code}
     ///
     /// Whether a reward code is valid (issued and unredeemed), with its kind and amount, so your checkout can apply it. Unknown codes answer `{ "valid": false }`.
@@ -2193,6 +2390,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `commissions:read` (or `full`), or a session of any role.
     public func getRewardsLookupCode(code: String, idempotencyKey: String? = nil) async throws -> GetRewardsLookupCodeResponse {
         return try await send("GET", "/v1/rewards/lookup/\(Self.segment(code))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// List reward rules. GET /v1/rewards/rules
+    ///
+    /// Your rules that turn an inbound event (or a rule key) into a fixed partner reward.
+    ///
+    /// **Auth:** an API key with `commissions:read` (or `full`), or a session of any role.
+    public func getRewardsRules(idempotencyKey: String? = nil) async throws -> [PutRewardsRulesKeyResponse] {
+        return try await send("GET", "/v1/rewards/rules", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Get the ROI breakdown. GET /v1/roi/breakdown
@@ -2378,6 +2584,36 @@ extension ReferalliClient {
     /// **Auth:** none.
     public func getStatusIncidentsId(id: String, idempotencyKey: String? = nil) async throws -> Incident {
         return try await send("GET", "/v1/status/incidents/\(Self.segment(id))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// List support tool connections. GET /v1/support/apps
+    ///
+    /// Every support tool Referalli can show referral context in (Chatly cards and AI tools, Intercom, Zendesk, HubSpot, Front, Help Scout, custom), with its card URL, install steps and whether it is set up. Secrets are never returned.
+    ///
+    /// **Auth:** an API key with `partners:read` (or `full`), or a session with role `owner`, `admin`.
+    public func getSupportApps(idempotencyKey: String? = nil) async throws -> GetSupportAppsResponse {
+        return try await send("GET", "/v1/support/apps", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Render a support card for a tool (GET). GET /v1/support/cards/{orgId}/{adapter}
+    ///
+    /// The same card for tools that fetch with GET (HubSpot legacy CRM cards pass the contact as query parameters). Signed as for the POST form; 404 otherwise.
+    ///
+    /// **Auth:** none.
+    public func getSupportCardsOrgIdAdapter(orgId: String, adapter: String, email: String? = nil, externalId: String? = nil, idempotencyKey: String? = nil) async throws -> PostSupportCardsOrgIdAdapterResponse {
+        return try await send("GET", "/v1/support/cards/\(Self.segment(orgId))/\(Self.segment(adapter))", query: [("email", Self.queryString(email)), ("externalId", Self.queryString(externalId))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Get referral context for a support contact. GET /v1/support/context
+    ///
+    /// What a support agent should know about a contact: the partner (status, tier, programs, referral link, pending/approved/paid balances, next payout, open flags) and/or the referred customer (who referred them, when, the referee reward and what is left of it). Name the contact by `partnerExternalRef`, `ext` (a tool's verified external id), `customerRef` or `email`; the email is used only when no stronger key is given. Your org's data only; `partner` and `customer` are null when nothing matches.
+    ///
+    /// **Auth:** an API key with `partners:read` (or `full`), or a session with role `owner`, `admin`, `support`, `finance`, `analyst`.
+    ///
+    /// email: Used only when no stronger key is given.
+    /// ext: A support tool's verified external id: matched as a partner externalRef, then as a customer ref.
+    public func getSupportContext(email: String? = nil, customerRef: String? = nil, partnerExternalRef: String? = nil, ext: String? = nil, idempotencyKey: String? = nil) async throws -> GetSupportContextResponse {
+        return try await send("GET", "/v1/support/context", query: [("email", Self.queryString(email)), ("customerRef", Self.queryString(customerRef)), ("partnerExternalRef", Self.queryString(partnerExternalRef)), ("ext", Self.queryString(ext))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Export 1099-NEC data. GET /v1/tax/1099
@@ -2621,7 +2857,7 @@ extension ReferalliClient {
 
     /// Update a billing connection. PATCH /v1/billing/connections/{id}
     ///
-    /// Renames a connection or sets `status`: `paused` makes its webhook URL refuse events until set back to `active`. Audited.
+    /// Renames a connection, sets `status` (`paused` makes its webhook URL refuse events until set back to `active`), or sets its product `filter` (`null` removes it). A filter applies to events received from then on. Audited.
     ///
     /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
     public func patchBillingConnectionsId(id: String, _ body: PatchBillingConnectionsIdBody, idempotencyKey: String? = nil) async throws -> BillingConnection {
@@ -2702,11 +2938,20 @@ extension ReferalliClient {
 
     /// Update a webhook endpoint. PATCH /v1/webhook-endpoints/{id}
     ///
-    /// Changes the URL, topics, programs (`null` or `[]` for every program) or legacy signature, or pauses it (`status: "paused"`, deliveries held). Setting `active` re-enables a paused or auto-disabled endpoint: held deliveries resume and the failure clock starts over. Audited.
+    /// Changes the URL, topics, programs (`null` or `[]` for every program) or legacy signature, or pauses it (`status: "paused"`, deliveries held). Setting `active` re-enables a paused or auto-disabled endpoint: held deliveries resume and the failure clock starts over. `warnings` has `domain_changed` when the URL moves to another host. Audited.
     ///
     /// **Auth:** an API key with `webhooks:write` (or `full`), or a session with role `owner`, `admin`.
-    public func patchWebhookEndpointsId(id: String, _ body: PatchWebhookEndpointsIdBody, idempotencyKey: String? = nil) async throws -> WebhookEndpoint {
+    public func patchWebhookEndpointsId(id: String, _ body: PatchWebhookEndpointsIdBody, idempotencyKey: String? = nil) async throws -> PatchWebhookEndpointsIdResponse {
         return try await send("PATCH", "/v1/webhook-endpoints/\(Self.segment(id))", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Close your own account. POST /v1/account/close
+    ///
+    /// Closes the signed-in merchant user or partner account: every session ends, identity is redacted and commission records stay under a pseudonym. Send `confirm` with the account's email. Refused (409) for an organization's only owner or a partner still owed money. Step-up: `x-totp-code` when two-factor is on, otherwise a sign-in less than 15 minutes old (else 401 `step_up_required`).
+    ///
+    /// **Auth:** a partner session.
+    public func postAccountClose(_ body: PostAccountCloseBody, idempotencyKey: String? = nil) async throws -> PostAccountCloseResponse {
+        return try await send("POST", "/v1/account/close", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Set an organization's plan. POST /v1/admin/orgs/{id}/plan
@@ -2817,6 +3062,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/attribution/replay", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Receive an OpenID Connect back-channel logout. POST /v1/auth/backchannel-logout
+    ///
+    /// The `backchannel_logout_uri` of Referalli's own sign-in client. Takes a form-encoded `logout_token` (OpenID Connect Back-Channel Logout 1.0): verified against the issuer's keys, `aud`, `events`, a fresh `iat`, no `nonce`, and a single-use `jti`; then ends the Referalli sessions for its `sid` (or every session of its `sub`). Answers 503 until the deployment sets IDP_LOGOUT_SYNC=true.
+    ///
+    /// **Auth:** none.
+    public func postAuthBackchannelLogout(_ body: PostAuthBackchannelLogoutBody, idempotencyKey: String? = nil) async throws -> PostAuthBackchannelLogoutResponse {
+        return try await send("POST", "/v1/auth/backchannel-logout", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Connect an auth platform. POST /v1/auth/connections
     ///
     /// Connects your sign-up system so new users are attributed server-side without calling associate: `clerk`, `supabase`, `workos` or `generic` receive the platform's user webhooks at the returned URL; `atlas` and `custom` call the signed protocol endpoints under `/v1/auth/connections/{id}/`. `autoEnrollUsers` makes every new user a partner too. Returns the signing secret once. 409 when an Atlas instance already has a connection.
@@ -2842,6 +3096,15 @@ extension ReferalliClient {
     /// **Auth:** a signature (see above); no API key.
     public func postAuthConnectionsIdErase(id: String, _ body: PostAuthConnectionsIdEraseBody, idempotencyKey: String? = nil) async throws -> PostAuthConnectionsIdEraseResponse {
         return try await send("POST", "/v1/auth/connections/\(Self.segment(id))/erase", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Enrol a user as a partner (signed protocol). POST /v1/auth/connections/{id}/partners
+    ///
+    /// A user asked to become a partner from the platform, with the code they chose: they are enrolled now (whatever `autoEnrollUsers` says), with a coupon and, when the connection has a destination, a link. 409 when the code is held by someone else. Signed like the other protocol calls (`x-referalli-signature`, `x-referalli-id`).
+    ///
+    /// **Auth:** none.
+    public func postAuthConnectionsIdPartners(id: String, _ body: PostAuthConnectionsIdPartnersBody, idempotencyKey: String? = nil) async throws -> PostAuthConnectionsIdPartnersResponse {
+        return try await send("POST", "/v1/auth/connections/\(Self.segment(id))/partners", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Test an auth connection (signed protocol). POST /v1/auth/connections/{id}/ping
@@ -2898,6 +3161,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/auth/connections/\(Self.segment(id))/users", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Approve a one-click install. POST /v1/auth/connections/install
+    ///
+    /// The dashboard's consent step for `GET /v1/oauth/authorize`: `allow` returns the redirect back to the platform with a single-use code (10 minutes) for the chosen program; `deny` returns it with `error=access_denied`. Owner or admin. Audited.
+    ///
+    /// **Auth:** an API key with `integrations:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postAuthConnectionsInstall(_ body: PostAuthConnectionsInstallBody, idempotencyKey: String? = nil) async throws -> PostAuthConnectionsInstallResponse {
+        return try await send("POST", "/v1/auth/connections/install", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Sign out. POST /v1/auth/logout
     ///
     /// Ends the browser session (and any portal-domain sessions handed off from it) and clears the cookies. Returns the identity provider's `logoutUrl` to end the provider session too, or `null`.
@@ -2927,7 +3199,7 @@ extension ReferalliClient {
 
     /// Create a billing connection. POST /v1/billing/connections
     ///
-    /// Connects a billing provider (`stripe`, `paddle`, `lemonsqueezy`, `polar`, `chargebee`, `shopify`, `recurly`, `braintree`, `woocommerce`, `bigcommerce` or `generic`) so its payment webhooks become commissions. Returns the `webhookUrl` path to register with the provider and its signing secret (generated unless you pass the provider's own `webhookSecret`); the secret is returned only here. Audited.
+    /// Connects a billing provider (`stripe`, `paddle`, `lemonsqueezy`, `polar`, `chargebee`, `shopify`, `recurly`, `braintree`, `woocommerce`, `bigcommerce` or `generic`) so its payment webhooks become commissions. Returns the `webhookUrl` path to register with the provider and its signing secret (generated unless you pass the provider's own `webhookSecret`); the secret is returned only here. A `filter` (`productIds`, `priceIds`, `skus` and/or exact `metadata`) limits which payments and subscription events earn when one provider account sells several products; the rest are recorded as `ignored_by_filter`. Audited.
     ///
     /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
     public func postBillingConnections(_ body: PostBillingConnectionsBody, idempotencyKey: String? = nil) async throws -> CreatedBillingConnection {
@@ -2950,6 +3222,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
     public func postBillingConnectionsIdValueMappingPreview(id: String, _ body: PostBillingConnectionsIdValueMappingPreviewBody, idempotencyKey: String? = nil) async throws -> ValueMappingPreview {
         return try await send("POST", "/v1/billing/connections/\(Self.segment(id))/value-mapping/preview", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Add an internal customer. POST /v1/billing/internal-customers
+    ///
+    /// Marks a customer ref (the provider customer id, or the `referalli_customer_ref` it is linked to) as internal: its payments are recorded as `ignored_by_filter` from now on. Idempotent; a repeat updates the note. Audited.
+    ///
+    /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postBillingInternalCustomers(_ body: PostBillingInternalCustomersBody, idempotencyKey: String? = nil) async throws -> PostBillingInternalCustomersResponse {
+        return try await send("POST", "/v1/billing/internal-customers", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Open the subscription portal. POST /v1/billing/portal
@@ -3348,6 +3629,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/notifications/\(Self.segment(id))/read", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Exchange an install code. POST /v1/oauth/token
+    ///
+    /// Server to server: the platform trades the single-use code and its PKCE `code_verifier` for a new signed-protocol connection and its signing secret (returned only here). Installing again for the same instance keeps the connection and issues a new secret, the old one verifying for 24 hours. 401 for an unknown, used, expired or mismatched code. No authentication.
+    ///
+    /// **Auth:** none.
+    public func postOauthToken(_ body: PostOauthTokenBody, idempotencyKey: String? = nil) async throws -> PostOauthTokenResponse {
+        return try await send("POST", "/v1/oauth/token", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Create an on-chain connection. POST /v1/onchain/connections
     ///
     /// Connects an on-chain indexer: on-chain conversions posted to its webhook URL become billing events. Returns the webhook URL and signing secret.
@@ -3355,6 +3645,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
     public func postOnchainConnections(_ body: PostOnchainConnectionsBody, idempotencyKey: String? = nil) async throws -> PostOnchainConnectionsResponse {
         return try await send("POST", "/v1/onchain/connections", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Check the hosted-page adapters. POST /v1/org/hosted-pages/check
+    ///
+    /// Read-only checks against the vendors: does the Cookie Munch site exist (and a reminder to add your portal domain as its alias), does each script URL answer. Updates `status` and `lastError`. Owner or admin.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postOrgHostedPagesCheck(idempotencyKey: String? = nil) async throws -> PostOrgHostedPagesCheckResponse {
+        return try await send("POST", "/v1/org/hosted-pages/check", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Add a team member. POST /v1/org/members
@@ -3366,6 +3665,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/org/members", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Test partner sign-in. POST /v1/org/portal-auth/test
+    ///
+    /// Checks the partner sign-in configuration (JWKS reachable, or OIDC discovery) and records the result.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postOrgPortalAuthTest(idempotencyKey: String? = nil) async throws -> PostOrgPortalAuthTestResponse {
+        return try await send("POST", "/v1/org/portal-auth/test", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Create an organization. POST /v1/orgs
     ///
     /// Creates an organization with the signed-in user as its owner. Needs a user session (not an API key) but no `x-org-id`. Limited to 20 per hour per user. Live mode only.
@@ -3373,6 +3681,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `team:write` (or `full`), or a session of any role.
     public func postOrgs(_ body: PostOrgsBody, idempotencyKey: String? = nil) async throws -> PostOrgsResponse {
         return try await send("POST", "/v1/orgs", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Test your identity provider. POST /v1/org/sso/direct/test
+    ///
+    /// Checks the configuration against the IdP (OIDC discovery, or the WorkOS organization) and records the result as the configuration's last success or last error.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postOrgSsoDirectTest(idempotencyKey: String? = nil) async throws -> PostOrgPortalAuthTestResponse {
+        return try await send("POST", "/v1/org/sso/direct/test", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Link the org to SSO. POST /v1/org/sso/link
@@ -3663,6 +3980,24 @@ extension ReferalliClient {
         return try await send("POST", "/v1/payout-runs/run-scheduled", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Mint a DSAR executor key. POST /v1/privacy/executor-keys
+    ///
+    /// Enables a DSAR tool for your org and mints its executor key (a bearer key, or a `whsec_` secret for Standard Webhooks), returned once. Rotating stops the old key at once. Also stores vendor settings: a Transcend public key and API key for completion callbacks, an Osano webhook secret.
+    ///
+    /// **Auth:** an API key with `privacy:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postPrivacyExecutorKeys(_ body: PostPrivacyExecutorKeysBody, idempotencyKey: String? = nil) async throws -> PostPrivacyExecutorKeysResponse {
+        return try await send("POST", "/v1/privacy/executor-keys", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Check a DSAR tool connection. POST /v1/privacy/executors/{adapter}/check
+    ///
+    /// Whether the tool is ready: a key or the vendor credentials it needs, and no failing requests since it was set up. Answers `{ok, detail, fix}`.
+    ///
+    /// **Auth:** an API key with `privacy:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postPrivacyExecutorsAdapterCheck(adapter: String, idempotencyKey: String? = nil) async throws -> PostPrivacyExecutorsAdapterCheckResponse {
+        return try await send("POST", "/v1/privacy/executors/\(Self.segment(adapter))/check", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Erase a data subject. POST /v1/privacy/forget
     ///
     /// Erases (pseudonymizes, keeping the ledger balanced) a customer by `customerRef`, a partner by `partnerId`, or by `email` both the partner with that email and every customer stored under its hash. Send exactly one. 400 when nothing is found. Audited.
@@ -3834,6 +4169,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/referrals/\(Self.segment(id))/void", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Reward a partner. POST /v1/rewards
+    ///
+    /// Rewards a partner for something outside a sale (a community answer, an event): one `earned` commission line that is approved and paid like any other. Name the partner by `partnerId` or `partnerExternalRef`; the amount is `amountMinor` (+ `currency`) or comes from a rule (`ruleKey`, or the `event` a rule maps). Idempotent on `idempotencyKey`: a retry returns the first grant with 200; the same key with a different request is 409.
+    ///
+    /// **Auth:** an API key with `commissions:write` (or `full`), or a session with role `owner`, `admin`, `finance`.
+    public func postRewards(_ body: PostRewardsBody, idempotencyKey: String? = nil) async throws -> PostRewardsResponse {
+        return try await send("POST", "/v1/rewards", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Redeem a reward. POST /v1/rewards/{id}/redeem
     ///
     /// Records a (possibly partial) redemption: `amountMinor` (default the remaining balance) is capped at what's left, and the reward becomes `redeemed` once it is used up. `externalId` makes it idempotent (409 if reused for another reward). Publishes `credit.redeemed`.
@@ -3868,6 +4212,24 @@ extension ReferalliClient {
     /// **Auth:** an API key with `billing:write` (or `full`), or a session with role `owner`, `admin`.
     public func postSandboxSimulate(_ body: PostSandboxSimulateBody, idempotencyKey: String? = nil) async throws -> PostSandboxSimulateResponse {
         return try await send("POST", "/v1/sandbox/simulate", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Preview a support card. POST /v1/support/apps/{adapter}/test
+    ///
+    /// Renders what the tool would show for a contact, from your own session: the context and the tool-format card. Nothing is sent to the tool.
+    ///
+    /// **Auth:** an API key with `partners:write` (or `full`), or a session with role `owner`, `admin`.
+    public func postSupportAppsAdapterTest(adapter: String, _ body: PostSupportAppsAdapterTestBody, idempotencyKey: String? = nil) async throws -> PostSupportAppsAdapterTestResponse {
+        return try await send("POST", "/v1/support/apps/\(Self.segment(adapter))/test", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Render a support card for a tool. POST /v1/support/cards/{orgId}/{adapter}
+    ///
+    /// Called by the support tool, signed in its own scheme (Chatly `x-chatly-signature`, Intercom `X-Body-Signature`, HubSpot v3, Front, Help Scout, a Zendesk app JWT, or the custom `X-Referalli-Signature`). Answers the tool's card format. An unknown org, a tool that is not connected, or a bad or stale signature all answer 404.
+    ///
+    /// **Auth:** none.
+    public func postSupportCardsOrgIdAdapter(orgId: String, adapter: String, _ body: [String: JSONValue], idempotencyKey: String? = nil) async throws -> PostSupportCardsOrgIdAdapterResponse {
+        return try await send("POST", "/v1/support/cards/\(Self.segment(orgId))/\(Self.segment(adapter))", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// File a corrected 1099. POST /v1/tax/1099/documents/{id}/correct
@@ -3953,11 +4315,22 @@ extension ReferalliClient {
 
     /// Create a webhook endpoint. POST /v1/webhook-endpoints
     ///
-    /// Subscribes an HTTPS URL to event topics (default `["*"]`, every event; see the `webhooks` section of this document for each topic's payload). `programIds` limits it to events about those programs (org-wide events such as payouts are then not sent). Deliveries are signed the Standard Webhooks way with the returned `secret` (`whsec_…`), shown only here. `legacySignature: true` also sends the deprecated body-only signature.
+    /// Subscribes an HTTPS URL to event topics (default `["*"]`, every event; see the `webhooks` section of this document for each topic's payload). `programIds` limits it to events about those programs (org-wide events such as payouts are then not sent). Deliveries are signed the Standard Webhooks way with the returned `secret` (`whsec_…`), shown only here. `legacySignature: true` also sends the deprecated body-only signature. `alertContacts` (up to 10 emails) are emailed, with the org owner, when the endpoint has failed for 1 hour and again at 24 hours; it is disabled after 72 hours of failures or 1,000 failed attempts in a row.
     ///
     /// **Auth:** an API key with `webhooks:write` (or `full`), or a session with role `owner`, `admin`.
     public func postWebhookEndpoints(_ body: PostWebhookEndpointsBody, idempotencyKey: String? = nil) async throws -> PostWebhookEndpointsResponse {
         return try await send("POST", "/v1/webhook-endpoints", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Replay failed deliveries. POST /v1/webhook-endpoints/{id}/replay
+    ///
+    /// Requeues the endpoint's failed deliveries created at or after `since` (ISO 8601), for after an outage. Each keeps its `webhook-id`, so receivers can dedupe. Audited.
+    ///
+    /// **Auth:** an API key with `webhooks:write` (or `full`), or a session with role `owner`, `admin`.
+    ///
+    /// since: Requeue failed deliveries created at or after this time.
+    public func postWebhookEndpointsIdReplay(id: String, since: String, idempotencyKey: String? = nil) async throws -> PostWebhookEndpointsIdReplayResponse {
+        return try await send("POST", "/v1/webhook-endpoints/\(Self.segment(id))/replay", query: [("since", Self.queryString(since))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Rotate an endpoint secret. POST /v1/webhook-endpoints/{id}/rotate-secret
@@ -3996,6 +4369,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/zapier/hooks", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Set a vendor-issued secret. PUT /v1/auth/connections/{id}/secret
+    ///
+    /// For webhook connectors whose vendor issues the signing secret (Clerk, Stytch, WorkOS) or key set (Kinde's JWKS document): replaces the connection's secret. The previous one keeps verifying for 24 hours. Signed-protocol connections rotate instead. Audited.
+    ///
+    /// **Auth:** an API key with `integrations:write` (or `full`), or a session with role `owner`, `admin`.
+    public func putAuthConnectionsIdSecret(id: String, _ body: PutAuthConnectionsIdSecretBody, idempotencyKey: String? = nil) async throws -> PutAuthConnectionsIdSecretResponse {
+        return try await send("PUT", "/v1/auth/connections/\(Self.segment(id))/secret", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Set provider API credentials. PUT /v1/billing/connections/{id}/credentials
     ///
     /// For providers that send thin webhooks (Recurly, BigCommerce), the API credentials used to fetch the full event: `apiKey`, or `apiToken` plus `storeHash`, and `region`. Stored encrypted. 400 for providers that take no credentials or when a required field is missing. Audited.
@@ -4025,10 +4407,10 @@ extension ReferalliClient {
 
     /// Update branding. PUT /v1/branding
     ///
-    /// Sets the logo URL, theme (only the documented `--r-*` tokens, with plain CSS values) and email sender. Omitted fields keep their value.
+    /// Sets the logo URL, theme (only the documented `--r-*` tokens, with plain CSS values) and email sender. Omitted fields keep their value. `warnings` lists theme text/background pairs (`--r-accent-ink` on `--r-accent`, `--r-ink` on `--r-paper`) below the 4.5:1 WCAG AA contrast; the theme is saved anyway.
     ///
     /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`.
-    public func putBranding(_ body: PutBrandingBody, idempotencyKey: String? = nil) async throws -> Ok {
+    public func putBranding(_ body: PutBrandingBody, idempotencyKey: String? = nil) async throws -> PutBrandingResponse {
         return try await send("PUT", "/v1/branding", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
@@ -4113,6 +4495,15 @@ extension ReferalliClient {
         return try await send("PUT", "/v1/org/fx-feed", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Set the hosted-page consent and chat. PUT /v1/org/hosted-pages
+    ///
+    /// Validates and saves the adapters. A CMP's `scriptUrl` must be https on that vendor's own hosts; `custom` needs every origin listed. `customOrigins` adds origins per CSP directive (https or wss, no wildcards, no keywords). Owner or admin. Audited.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`.
+    public func putOrgHostedPages(_ body: PutOrgHostedPagesBody, idempotencyKey: String? = nil) async throws -> GetOrgHostedPagesResponse {
+        return try await send("PUT", "/v1/org/hosted-pages", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Set the org payout schedule. PUT /v1/org/payout-schedule
     ///
     /// When payouts run automatically for every program without its own schedule: a `schedule` (`monthly`, `weekly`, `twice_monthly` or `custom` dates), the older `dayOfMonth` form, or `null` to turn automatic payouts off. Send exactly one of `schedule` and `dayOfMonth`. Audited.
@@ -4120,6 +4511,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `payouts:write` (or `full`), or a session with role `owner`, `admin`, `finance`.
     public func putOrgPayoutSchedule(_ body: PutOrgPayoutScheduleBody, idempotencyKey: String? = nil) async throws -> PutOrgPayoutScheduleResponse {
         return try await send("PUT", "/v1/org/payout-schedule", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Set partner sign-in. PUT /v1/org/portal-auth
+    ///
+    /// Chooses the portal sign-in adapter and its settings. `custom`: `issuer`, `jwksUrl` (https), optional `loginUrl` (your page that mints the token) and `autoEnrollProgramId`. `oidc`: `issuer`, `clientId`, `clientSecret`. `referalli` removes any configuration. Owner only.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`.
+    public func putOrgPortalAuth(_ body: JSONValue, idempotencyKey: String? = nil) async throws -> PutOrgPortalAuthResponse {
+        return try await send("PUT", "/v1/org/portal-auth", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Set referral query parameters. PUT /v1/org/referral-params
@@ -4140,6 +4540,15 @@ extension ReferalliClient {
         return try await send("PUT", "/v1/org/retention", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Connect your own identity provider. PUT /v1/org/sso/direct
+    ///
+    /// Team SSO with the org's own IdP, no broker: `adapter` `oidc` (issuer, client id and secret, the claim that holds roles) or `workos` (client id, organization id, the org's own API key). `roleMapping` maps IdP groups or roles to `admin`, `finance`, `analyst` or `support` (never owner); `defaultRole` covers everyone else, or null to keep them out; `domains` are the email domains "require SSO" applies to. The secret is encrypted and never returned; leave it out to keep the stored one. 409 while the org uses the Atlas broker. Owner only.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`.
+    public func putOrgSsoDirect(_ body: JSONValue, idempotencyKey: String? = nil) async throws -> PutOrgSsoDirectResponse {
+        return try await send("PUT", "/v1/org/sso/direct", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Connect a 1099 filing provider. PUT /v1/org/tax-filing
     ///
     /// Chooses who e-files 1099-NEC forms: `test` (simulated) or `tax1099` with your own API key (stored encrypted). Audited.
@@ -4156,6 +4565,15 @@ extension ReferalliClient {
     /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`, `finance`.
     public func putOrgTaxProfile(_ body: PutOrgTaxProfileBody, idempotencyKey: String? = nil) async throws -> TaxProfile {
         return try await send("PUT", "/v1/org/tax-profile", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Set the tracker's consent default. PUT /v1/org/tracking-consent
+    ///
+    /// Sets the consent default served inside `/t/{token}/aff.js` (cached up to 5 minutes). Owner or admin. Audited.
+    ///
+    /// **Auth:** an API key with `org:write` (or `full`), or a session with role `owner`, `admin`.
+    public func putOrgTrackingConsent(_ body: PutOrgTrackingConsentBody, idempotencyKey: String? = nil) async throws -> GetOrgTrackingConsentResponse {
+        return try await send("PUT", "/v1/org/tracking-consent", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Set my email language (partner). PUT /v1/partner/locale
@@ -4302,6 +4720,24 @@ extension ReferalliClient {
         return try await send("PUT", "/v1/programs/\(Self.segment(id))/referee-reward", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Save a reward rule. PUT /v1/rewards/rules/{key}
+    ///
+    /// Creates or replaces a rule: the amount, the reason, an optional program and an optional `event` it rewards (one rule per event).
+    ///
+    /// **Auth:** an API key with `commissions:write` (or `full`), or a session with role `owner`, `admin`.
+    public func putRewardsRulesKey(key: String, _ body: PutRewardsRulesKeyBody, idempotencyKey: String? = nil) async throws -> PutRewardsRulesKeyResponse {
+        return try await send("PUT", "/v1/rewards/rules/\(Self.segment(key))", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Connect a support tool. PUT /v1/support/apps/{adapter}
+    ///
+    /// Enable a support tool and store its signing secret (vendor-issued; write-only) or, for Zendesk, the app public key in `config.publicKeyPem`. For `custom` Referalli mints the secret: it is returned once, and `rotate: true` mints a new one.
+    ///
+    /// **Auth:** an API key with `partners:write` (or `full`), or a session with role `owner`, `admin`.
+    public func putSupportAppsAdapter(adapter: String, _ body: PutSupportAppsAdapterBody, idempotencyKey: String? = nil) async throws -> PutSupportAppsAdapterResponse {
+        return try await send("PUT", "/v1/support/apps/\(Self.segment(adapter))", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Calls any operation by its id through its typed method; JSON in, JSON out.
     public func call(_ operationId: String, path: [String: String] = [:], query: [String: JSONValue] = [:], body: JSONValue? = nil, idempotencyKey: String? = nil) async throws -> JSONValue {
         switch operationId {
@@ -4313,6 +4749,8 @@ extension ReferalliClient {
             return try Self.encode(try await deleteAuthConnectionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteBillingConnectionsId":
             return try Self.encode(try await deleteBillingConnectionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
+        case "deleteBillingInternalCustomersCustomerRef":
+            return try Self.encode(try await deleteBillingInternalCustomersCustomerRef(customerRef: path["customerRef"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteBrandingDomain":
             return try Self.encode(try await deleteBrandingDomain(idempotencyKey: idempotencyKey))
         case "deleteBrandingLinkDomain":
@@ -4325,12 +4763,20 @@ extension ReferalliClient {
             return try Self.encode(try await deleteIntegrationsKind(kind: path["kind"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteOrgMembersUserId":
             return try Self.encode(try await deleteOrgMembersUserId(userId: path["userId"] ?? "", idempotencyKey: idempotencyKey))
+        case "deleteOrgSsoDirect":
+            return try Self.encode(try await deleteOrgSsoDirect(idempotencyKey: idempotencyKey))
         case "deletePartnersId":
             return try Self.encode(try await deletePartnersId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "deletePayoutConnectionsProvider":
             return try Self.encode(try await deletePayoutConnectionsProvider(provider: path["provider"] ?? "", idempotencyKey: idempotencyKey))
+        case "deletePrivacyExecutorsAdapter":
+            return try Self.encode(try await deletePrivacyExecutorsAdapter(adapter: path["adapter"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteProfitabilityProductsProductRef":
             return try Self.encode(try await deleteProfitabilityProductsProductRef(productRef: path["productRef"] ?? "", idempotencyKey: idempotencyKey))
+        case "deleteRewardsRulesKey":
+            return try Self.encode(try await deleteRewardsRulesKey(key: path["key"] ?? "", idempotencyKey: idempotencyKey))
+        case "deleteSupportAppsAdapter":
+            return try Self.encode(try await deleteSupportAppsAdapter(adapter: path["adapter"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteWebhookEndpointsId":
             return try Self.encode(try await deleteWebhookEndpointsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteZapierHooksId":
@@ -4371,6 +4817,8 @@ extension ReferalliClient {
             return try Self.encode(try await getAuthConnections(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getAuthConnectionsIdExport":
             return try Self.encode(try await getAuthConnectionsIdExport(id: path["id"] ?? "", customerRef: Self.queryString(query["customerRef"]) ?? "", idempotencyKey: idempotencyKey))
+        case "getAuthConnectionsProviders":
+            return try Self.encode(try await getAuthConnectionsProviders(idempotencyKey: idempotencyKey))
         case "getAuthProviders":
             return try Self.encode(try await getAuthProviders(idempotencyKey: idempotencyKey))
         case "getBillingConnections":
@@ -4378,15 +4826,23 @@ extension ReferalliClient {
         case "getBillingConnectionsId":
             return try Self.encode(try await getBillingConnectionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "getBillingEvents":
-            return try Self.encode(try await getBillingEvents(customerRef: Self.queryString(query["customerRef"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+            return try Self.encode(try await getBillingEvents(customerRef: Self.queryString(query["customerRef"]), status: Self.queryString(query["status"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+        case "getBillingInternalCustomers":
+            return try Self.encode(try await getBillingInternalCustomers(idempotencyKey: idempotencyKey))
         case "getBillingPlan":
             return try Self.encode(try await getBillingPlan(idempotencyKey: idempotencyKey))
         case "getBranding":
             return try Self.encode(try await getBranding(idempotencyKey: idempotencyKey))
+        case "getChatlyIdentity":
+            return try Self.encode(try await getChatlyIdentity(idempotencyKey: idempotencyKey))
         case "getCleanroomConsent":
             return try Self.encode(try await getCleanroomConsent(customerRef: Self.queryString(query["customerRef"]) ?? "", idempotencyKey: idempotencyKey))
         case "getCleanroomQuery":
             return try Self.encode(try await getCleanroomQuery(dimension: Self.queryString(query["dimension"]) ?? "", idempotencyKey: idempotencyKey))
+        case "getClicksConsentCoverage":
+            return try Self.encode(try await getClicksConsentCoverage(days: Self.queryInt(query["days"]), idempotencyKey: idempotencyKey))
+        case "getClicksId":
+            return try Self.encode(try await getClicksId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "getCliDeviceCodesUserCode":
             return try Self.encode(try await getCliDeviceCodesUserCode(userCode: path["userCode"] ?? "", idempotencyKey: idempotencyKey))
         case "getCliListenersIdEvents":
@@ -4417,8 +4873,12 @@ extension ReferalliClient {
             return try Self.encode(try await getEmailSettings(idempotencyKey: idempotencyKey))
         case "getEmailTemplates":
             return try Self.encode(try await getEmailTemplates(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+        case "getEmbed":
+            return try Self.encode(try await getEmbed(token: Self.queryString(query["token"]) ?? "", idempotencyKey: idempotencyKey))
         case "getEmbedSummary":
             return try Self.encode(try await getEmbedSummary(idempotencyKey: idempotencyKey))
+        case "getEvents":
+            return try Self.encode(try await getEvents(since: Self.queryString(query["since"]), topics: Self.queryString(query["topics"]), after: Self.queryString(query["after"]), limit: Self.queryInt(query["limit"]), idempotencyKey: idempotencyKey))
         case "getExportAccounting":
             return .string(try await getExportAccounting(format: Self.queryString(query["format"]), year: Self.queryInt(query["year"]) ?? 0, idempotencyKey: idempotencyKey))
         case "getExportFull":
@@ -4437,6 +4897,8 @@ extension ReferalliClient {
             return .string(try await getHostsCurrentThemeCss(idempotencyKey: idempotencyKey))
         case "getIncrementality":
             return try Self.encode(try await getIncrementality(programId: Self.queryString(query["programId"]) ?? "", idempotencyKey: idempotencyKey))
+        case "getIntegrationHealth":
+            return try Self.encode(try await getIntegrationHealth(idempotencyKey: idempotencyKey))
         case "getIntegrations":
             return try Self.encode(try await getIntegrations(idempotencyKey: idempotencyKey))
         case "getIntegrationsDeliveries":
@@ -4469,10 +4931,14 @@ extension ReferalliClient {
             return try Self.encode(try await getOrg(idempotencyKey: idempotencyKey))
         case "getOrgFxFeed":
             return try Self.encode(try await getOrgFxFeed(idempotencyKey: idempotencyKey))
+        case "getOrgHostedPages":
+            return try Self.encode(try await getOrgHostedPages(idempotencyKey: idempotencyKey))
         case "getOrgMembers":
             return try Self.encode(try await getOrgMembers(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getOrgPayoutSchedule":
             return try Self.encode(try await getOrgPayoutSchedule(idempotencyKey: idempotencyKey))
+        case "getOrgPortalAuth":
+            return try Self.encode(try await getOrgPortalAuth(idempotencyKey: idempotencyKey))
         case "getOrgReferralParams":
             return try Self.encode(try await getOrgReferralParams(idempotencyKey: idempotencyKey))
         case "getOrgRetention":
@@ -4483,6 +4949,8 @@ extension ReferalliClient {
             return try Self.encode(try await getOrgSsoConnectionsIdSamlMetadata(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "getOrgTaxProfile":
             return try Self.encode(try await getOrgTaxProfile(idempotencyKey: idempotencyKey))
+        case "getOrgTrackingConsent":
+            return try Self.encode(try await getOrgTrackingConsent(idempotencyKey: idempotencyKey))
         case "getOutreach":
             return try Self.encode(try await getOutreach(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getPartnerAchievements":
@@ -4569,6 +5037,14 @@ extension ReferalliClient {
             return try Self.encode(try await getPayouts(partnerId: Self.queryString(query["partnerId"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getPayoutsIdInvoice":
             return try Self.encode(try await getPayoutsIdInvoice(id: path["id"] ?? "", format: Self.queryString(query["format"]), idempotencyKey: idempotencyKey))
+        case "getPlans":
+            return try Self.encode(try await getPlans(idempotencyKey: idempotencyKey))
+        case "getPortalAuthCurrent":
+            return try Self.encode(try await getPortalAuthCurrent(org: Self.queryString(query["org"]), idempotencyKey: idempotencyKey))
+        case "getPrivacyExecutorRequests":
+            return try Self.encode(try await getPrivacyExecutorRequests(idempotencyKey: idempotencyKey))
+        case "getPrivacyExecutors":
+            return try Self.encode(try await getPrivacyExecutors(idempotencyKey: idempotencyKey))
         case "getPrivacyExport":
             return try Self.encode(try await getPrivacyExport(customerRef: Self.queryString(query["customerRef"]) ?? "", idempotencyKey: idempotencyKey))
         case "getPrivacyRequests":
@@ -4621,8 +5097,12 @@ extension ReferalliClient {
             return try Self.encode(try await getReportsPartnerPerformance(format: Self.queryString(query["format"]), idempotencyKey: idempotencyKey))
         case "getRewards":
             return try Self.encode(try await getRewards(status: Self.queryString(query["status"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+        case "getRewardsGranted":
+            return try Self.encode(try await getRewardsGranted(idempotencyKey: idempotencyKey))
         case "getRewardsLookupCode":
             return try Self.encode(try await getRewardsLookupCode(code: path["code"] ?? "", idempotencyKey: idempotencyKey))
+        case "getRewardsRules":
+            return try Self.encode(try await getRewardsRules(idempotencyKey: idempotencyKey))
         case "getRoiBreakdown":
             return try Self.encode(try await getRoiBreakdown(from: Self.queryString(query["from"]), to: Self.queryString(query["to"]), programId: Self.queryString(query["programId"]), partnerId: Self.queryString(query["partnerId"]), windowDays: Self.queryInt(query["windowDays"]), currency: Self.queryString(query["currency"]), format: Self.queryString(query["format"]), by: Self.queryString(query["by"]) ?? "", limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getRoiDataQuality":
@@ -4649,6 +5129,12 @@ extension ReferalliClient {
             return .string(try await getStatusIncidentsAtom(idempotencyKey: idempotencyKey))
         case "getStatusIncidentsId":
             return try Self.encode(try await getStatusIncidentsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
+        case "getSupportApps":
+            return try Self.encode(try await getSupportApps(idempotencyKey: idempotencyKey))
+        case "getSupportCardsOrgIdAdapter":
+            return try Self.encode(try await getSupportCardsOrgIdAdapter(orgId: path["orgId"] ?? "", adapter: path["adapter"] ?? "", email: Self.queryString(query["email"]), externalId: Self.queryString(query["externalId"]), idempotencyKey: idempotencyKey))
+        case "getSupportContext":
+            return try Self.encode(try await getSupportContext(email: Self.queryString(query["email"]), customerRef: Self.queryString(query["customerRef"]), partnerExternalRef: Self.queryString(query["partnerExternalRef"]), ext: Self.queryString(query["ext"]), idempotencyKey: idempotencyKey))
         case "getTax1099":
             return try Self.encode(try await getTax1099(year: Self.queryInt(query["year"]) ?? 0, limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getTax1099Filings":
@@ -4705,6 +5191,8 @@ extension ReferalliClient {
             return try Self.encode(try await patchReferralsId(id: path["id"] ?? "", try Self.decode(PatchReferralsIdBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "patchWebhookEndpointsId":
             return try Self.encode(try await patchWebhookEndpointsId(id: path["id"] ?? "", try Self.decode(PatchWebhookEndpointsIdBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postAccountClose":
+            return try Self.encode(try await postAccountClose(try Self.decode(PostAccountCloseBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAdminOrgsIdPlan":
             return try Self.encode(try await postAdminOrgsIdPlan(id: path["id"] ?? "", try Self.decode(PostAdminOrgsIdPlanBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAdminOrgsIdSuspend":
@@ -4729,12 +5217,16 @@ extension ReferalliClient {
             return try Self.encode(try await postAssets(try Self.decode(PostAssetsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAttributionReplay":
             return try Self.encode(try await postAttributionReplay(try Self.decode(PostAttributionReplayBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postAuthBackchannelLogout":
+            return try Self.encode(try await postAuthBackchannelLogout(try Self.decode(PostAuthBackchannelLogoutBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnections":
             return try Self.encode(try await postAuthConnections(try Self.decode(PostAuthConnectionsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdAliases":
             return try Self.encode(try await postAuthConnectionsIdAliases(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdAliasesBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdErase":
             return try Self.encode(try await postAuthConnectionsIdErase(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdEraseBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postAuthConnectionsIdPartners":
+            return try Self.encode(try await postAuthConnectionsIdPartners(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdPartnersBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdPing":
             return try Self.encode(try await postAuthConnectionsIdPing(id: path["id"] ?? "", try Self.decode([String: JSONValue].self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdRevokePreviousSecret":
@@ -4747,6 +5239,8 @@ extension ReferalliClient {
             return try Self.encode(try await postAuthConnectionsIdSignups(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdSignupsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdUsers":
             return try Self.encode(try await postAuthConnectionsIdUsers(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdUsersBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postAuthConnectionsInstall":
+            return try Self.encode(try await postAuthConnectionsInstall(try Self.decode(PostAuthConnectionsInstallBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthLogout":
             return try Self.encode(try await postAuthLogout(idempotencyKey: idempotencyKey))
         case "postBillingActivate":
@@ -4759,6 +5253,8 @@ extension ReferalliClient {
             return try Self.encode(try await postBillingConnectionsIdRotateSecret(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postBillingConnectionsIdValueMappingPreview":
             return try Self.encode(try await postBillingConnectionsIdValueMappingPreview(id: path["id"] ?? "", try Self.decode(PostBillingConnectionsIdValueMappingPreviewBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postBillingInternalCustomers":
+            return try Self.encode(try await postBillingInternalCustomers(try Self.decode(PostBillingInternalCustomersBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postBillingPortal":
             return try Self.encode(try await postBillingPortal(idempotencyKey: idempotencyKey))
         case "postBrandingDomain":
@@ -4847,12 +5343,20 @@ extension ReferalliClient {
             return try Self.encode(try await postMobilePurchases(try Self.decode(PostMobilePurchasesBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postNotificationsIdRead":
             return try Self.encode(try await postNotificationsIdRead(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
+        case "postOauthToken":
+            return try Self.encode(try await postOauthToken(try Self.decode(PostOauthTokenBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postOnchainConnections":
             return try Self.encode(try await postOnchainConnections(try Self.decode(PostOnchainConnectionsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postOrgHostedPagesCheck":
+            return try Self.encode(try await postOrgHostedPagesCheck(idempotencyKey: idempotencyKey))
         case "postOrgMembers":
             return try Self.encode(try await postOrgMembers(try Self.decode(PostOrgMembersBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postOrgPortalAuthTest":
+            return try Self.encode(try await postOrgPortalAuthTest(idempotencyKey: idempotencyKey))
         case "postOrgs":
             return try Self.encode(try await postOrgs(try Self.decode(PostOrgsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postOrgSsoDirectTest":
+            return try Self.encode(try await postOrgSsoDirectTest(idempotencyKey: idempotencyKey))
         case "postOrgSsoLink":
             return try Self.encode(try await postOrgSsoLink(idempotencyKey: idempotencyKey))
         case "postOrgSsoTickets":
@@ -4917,6 +5421,10 @@ extension ReferalliClient {
             return try Self.encode(try await postPayoutRunsIdExecute(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postPayoutRunsRunScheduled":
             return try Self.encode(try await postPayoutRunsRunScheduled(idempotencyKey: idempotencyKey))
+        case "postPrivacyExecutorKeys":
+            return try Self.encode(try await postPrivacyExecutorKeys(try Self.decode(PostPrivacyExecutorKeysBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postPrivacyExecutorsAdapterCheck":
+            return try Self.encode(try await postPrivacyExecutorsAdapterCheck(adapter: path["adapter"] ?? "", idempotencyKey: idempotencyKey))
         case "postPrivacyForget":
             return try Self.encode(try await postPrivacyForget(try Self.decode(PostPrivacyForgetBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postPrivacyLookup":
@@ -4955,6 +5463,8 @@ extension ReferalliClient {
             return try Self.encode(try await postReferralsIdReassign(id: path["id"] ?? "", try Self.decode(PostReferralsIdReassignBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postReferralsIdVoid":
             return try Self.encode(try await postReferralsIdVoid(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
+        case "postRewards":
+            return try Self.encode(try await postRewards(try Self.decode(PostRewardsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postRewardsIdRedeem":
             return try Self.encode(try await postRewardsIdRedeem(id: path["id"] ?? "", try Self.decode(PostRewardsIdRedeemBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postRewardsRedeemByCode":
@@ -4963,6 +5473,10 @@ extension ReferalliClient {
             return try Self.encode(try await postRoiPatternsPatternReview(pattern: path["pattern"] ?? "", try Self.decode(PostRoiPatternsPatternReviewBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postSandboxSimulate":
             return try Self.encode(try await postSandboxSimulate(try Self.decode(PostSandboxSimulateBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postSupportAppsAdapterTest":
+            return try Self.encode(try await postSupportAppsAdapterTest(adapter: path["adapter"] ?? "", try Self.decode(PostSupportAppsAdapterTestBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postSupportCardsOrgIdAdapter":
+            return try Self.encode(try await postSupportCardsOrgIdAdapter(orgId: path["orgId"] ?? "", adapter: path["adapter"] ?? "", try Self.decode([String: JSONValue].self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postTax1099DocumentsIdCorrect":
             return try Self.encode(try await postTax1099DocumentsIdCorrect(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postTax1099Filings":
@@ -4983,6 +5497,8 @@ extension ReferalliClient {
             return try Self.encode(try await postWebhookDeliveriesIdReplay(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postWebhookEndpoints":
             return try Self.encode(try await postWebhookEndpoints(try Self.decode(PostWebhookEndpointsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postWebhookEndpointsIdReplay":
+            return try Self.encode(try await postWebhookEndpointsIdReplay(id: path["id"] ?? "", since: Self.queryString(query["since"]) ?? "", idempotencyKey: idempotencyKey))
         case "postWebhookEndpointsIdRotateSecret":
             return try Self.encode(try await postWebhookEndpointsIdRotateSecret(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postWidgetTokens":
@@ -4991,6 +5507,8 @@ extension ReferalliClient {
             return try Self.encode(try await postZapierConversions(try Self.decode(PostZapierConversionsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postZapierHooks":
             return try Self.encode(try await postZapierHooks(try Self.decode(PostZapierHooksBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putAuthConnectionsIdSecret":
+            return try Self.encode(try await putAuthConnectionsIdSecret(id: path["id"] ?? "", try Self.decode(PutAuthConnectionsIdSecretBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putBillingConnectionsIdCredentials":
             return try Self.encode(try await putBillingConnectionsIdCredentials(id: path["id"] ?? "", try Self.decode(PutBillingConnectionsIdCredentialsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putBillingConnectionsIdSecret":
@@ -5017,16 +5535,24 @@ extension ReferalliClient {
             return try Self.encode(try await putNetworkSettings(try Self.decode(PutNetworkSettingsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putOrgFxFeed":
             return try Self.encode(try await putOrgFxFeed(try Self.decode(PutOrgFxFeedBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putOrgHostedPages":
+            return try Self.encode(try await putOrgHostedPages(try Self.decode(PutOrgHostedPagesBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putOrgPayoutSchedule":
             return try Self.encode(try await putOrgPayoutSchedule(try Self.decode(PutOrgPayoutScheduleBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putOrgPortalAuth":
+            return try Self.encode(try await putOrgPortalAuth(try Self.decode(JSONValue.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putOrgReferralParams":
             return try Self.encode(try await putOrgReferralParams(try Self.decode(PutOrgReferralParamsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putOrgRetention":
             return try Self.encode(try await putOrgRetention(try Self.decode(PutOrgRetentionBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putOrgSsoDirect":
+            return try Self.encode(try await putOrgSsoDirect(try Self.decode(JSONValue.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putOrgTaxFiling":
             return try Self.encode(try await putOrgTaxFiling(try Self.decode(PutOrgTaxFilingBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putOrgTaxProfile":
             return try Self.encode(try await putOrgTaxProfile(try Self.decode(PutOrgTaxProfileBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putOrgTrackingConsent":
+            return try Self.encode(try await putOrgTrackingConsent(try Self.decode(PutOrgTrackingConsentBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putPartnerLocale":
             return try Self.encode(try await putPartnerLocale(try Self.decode(PutPartnerLocaleBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putPartnerOrgsOrgIdPayoutProfile":
@@ -5059,6 +5585,10 @@ extension ReferalliClient {
             return try Self.encode(try await putProgramsIdPayoutSchedule(id: path["id"] ?? "", try Self.decode(PutProgramsIdPayoutScheduleBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putProgramsIdRefereeReward":
             return try Self.encode(try await putProgramsIdRefereeReward(id: path["id"] ?? "", try Self.decode(PutProgramsIdRefereeRewardBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putRewardsRulesKey":
+            return try Self.encode(try await putRewardsRulesKey(key: path["key"] ?? "", try Self.decode(PutRewardsRulesKeyBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putSupportAppsAdapter":
+            return try Self.encode(try await putSupportAppsAdapter(adapter: path["adapter"] ?? "", try Self.decode(PutSupportAppsAdapterBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         default:
             throw ReferalliError.unknownOperation(operationId)
         }

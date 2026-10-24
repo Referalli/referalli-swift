@@ -71,9 +71,13 @@ public enum WebhookTopic {
     public static let taxFormDelivered = "tax.form_delivered"
     /// `webhook_endpoint.disabled`: A failing webhook endpoint was disabled
     public static let webhookEndpointDisabled = "webhook_endpoint.disabled"
+    /// `webhook_endpoint.failing`: A webhook endpoint keeps failing
+    public static let webhookEndpointFailing = "webhook_endpoint.failing"
+    /// `webhook_endpoint.recovered`: A failing webhook endpoint recovered
+    public static let webhookEndpointRecovered = "webhook_endpoint.recovered"
 
     /// Every topic.
-    public static let all: [String] = ["billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "tax.form_delivered", "webhook_endpoint.disabled"]
+    public static let all: [String] = ["billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
 }
 
 /// A webhook event's payload, typed by topic. `.unknown` is a topic this SDK predates.
@@ -144,6 +148,10 @@ public enum WebhookPayload: Sendable {
     case taxFormDelivered(TaxFormDeliveredEventData)
     /// `webhook_endpoint.disabled`
     case webhookEndpointDisabled(WebhookEndpointDisabledEventData)
+    /// `webhook_endpoint.failing`
+    case webhookEndpointFailing(WebhookEndpointFailingEventData)
+    /// `webhook_endpoint.recovered`
+    case webhookEndpointRecovered(WebhookEndpointRecoveredEventData)
     case unknown(topic: String, data: JSONValue)
 
     static func decode(topic: String, data: JSONValue) throws -> WebhookPayload {
@@ -214,6 +222,10 @@ public enum WebhookPayload: Sendable {
             return .taxFormDelivered(try ReferalliClient.decode(TaxFormDeliveredEventData.self, from: data))
         case "webhook_endpoint.disabled":
             return .webhookEndpointDisabled(try ReferalliClient.decode(WebhookEndpointDisabledEventData.self, from: data))
+        case "webhook_endpoint.failing":
+            return .webhookEndpointFailing(try ReferalliClient.decode(WebhookEndpointFailingEventData.self, from: data))
+        case "webhook_endpoint.recovered":
+            return .webhookEndpointRecovered(try ReferalliClient.decode(WebhookEndpointRecoveredEventData.self, from: data))
         default:
             return .unknown(topic: topic, data: data)
         }
