@@ -325,19 +325,23 @@ public struct Enrollment: Codable, Sendable, Equatable {
     public var id: String
     public var programId: String
     public var partnerId: String
+    /// This program's own externalRef for the partner, or null.
+    public var externalRef: String?
     public var status: String
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
         case programId = "programId"
         case partnerId = "partnerId"
+        case externalRef = "externalRef"
         case status = "status"
     }
 
-    public init(id: String, programId: String, partnerId: String, status: String) {
+    public init(id: String, programId: String, partnerId: String, externalRef: String? = nil, status: String) {
         self.id = id
         self.programId = programId
         self.partnerId = partnerId
+        self.externalRef = externalRef
         self.status = status
     }
 }
@@ -1179,6 +1183,8 @@ public struct BillingConnection: Codable, Sendable, Equatable {
     public var valueMapping: ValueMapping?
     /// Only matching events earn; the rest are recorded as ignored_by_filter. null takes every event.
     public var filter: BillingFilter?
+    /// The provider metadata key that holds your customerRef, when it is not referalli_customer_ref.
+    public var customerRefMetadataKey: String?
     public var rotation: BillingConnectionRotation
 
     enum CodingKeys: String, CodingKey {
@@ -1192,10 +1198,11 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case hasCredentials = "hasCredentials"
         case valueMapping = "valueMapping"
         case filter = "filter"
+        case customerRefMetadataKey = "customerRefMetadataKey"
         case rotation = "rotation"
     }
 
-    public init(id: String, provider: String, name: String, status: String, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, rotation: BillingConnectionRotation) {
+    public init(id: String, provider: String, name: String, status: String, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, rotation: BillingConnectionRotation) {
         self.id = id
         self.provider = provider
         self.name = name
@@ -1206,6 +1213,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         self.hasCredentials = hasCredentials
         self.valueMapping = valueMapping
         self.filter = filter
+        self.customerRefMetadataKey = customerRefMetadataKey
         self.rotation = rotation
     }
 }
@@ -1218,6 +1226,8 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
     /// Path to register with the provider.
     public var webhookUrl: String
     public var filter: BillingFilter?
+    /// The provider metadata key that holds your customerRef, when it is not referalli_customer_ref.
+    public var customerRefMetadataKey: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -1225,14 +1235,16 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
         case webhookSecret = "webhookSecret"
         case webhookUrl = "webhookUrl"
         case filter = "filter"
+        case customerRefMetadataKey = "customerRefMetadataKey"
     }
 
-    public init(id: String, provider: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil) {
+    public init(id: String, provider: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil) {
         self.id = id
         self.provider = provider
         self.webhookSecret = webhookSecret
         self.webhookUrl = webhookUrl
         self.filter = filter
+        self.customerRefMetadataKey = customerRefMetadataKey
     }
 }
 
@@ -2019,6 +2031,38 @@ public struct FxRate: Codable, Sendable, Equatable {
     }
 }
 
+/// The plan's caps (null: unlimited). A test org runs on its live org's plan.
+public struct OrgLimits: Codable, Sendable, Equatable {
+    public var programs: Int?
+    public var partners: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case programs = "programs"
+        case partners = "partners"
+    }
+
+    public init(programs: Int? = nil, partners: Int? = nil) {
+        self.programs = programs
+        self.partners = partners
+    }
+}
+
+/// What counts against the caps: programs that are not archived, and partners.
+public struct OrgUsage: Codable, Sendable, Equatable {
+    public var programs: Int
+    public var partners: Int
+
+    enum CodingKeys: String, CodingKey {
+        case programs = "programs"
+        case partners = "partners"
+    }
+
+    public init(programs: Int, partners: Int) {
+        self.programs = programs
+        self.partners = partners
+    }
+}
+
 public struct Org: Codable, Sendable, Equatable {
     public var id: String
     public var name: String
@@ -2028,6 +2072,12 @@ public struct Org: Codable, Sendable, Equatable {
     public var payoutKycRequired: Bool
     /// False for the org's test org (test mode).
     public var livemode: Bool
+    /// The plan's caps (null: unlimited). A test org runs on its live org's plan.
+    public var limits: OrgLimits
+    /// What counts against the caps: programs that are not archived, and partners.
+    public var usage: OrgUsage
+    /// Where partners sign in: the org's verified portal domain, else Referalli's own portal.
+    public var portalUrl: String
     /// On a test org: the live org it belongs to.
     public var liveOrgId: String?
 
@@ -2039,10 +2089,13 @@ public struct Org: Codable, Sendable, Equatable {
         case trackingToken = "trackingToken"
         case payoutKycRequired = "payoutKycRequired"
         case livemode = "livemode"
+        case limits = "limits"
+        case usage = "usage"
+        case portalUrl = "portalUrl"
         case liveOrgId = "liveOrgId"
     }
 
-    public init(id: String, name: String, plan: String, settings: GetOpenapiJsonResponse, trackingToken: String, payoutKycRequired: Bool, livemode: Bool, liveOrgId: String? = nil) {
+    public init(id: String, name: String, plan: String, settings: GetOpenapiJsonResponse, trackingToken: String, payoutKycRequired: Bool, livemode: Bool, limits: OrgLimits, usage: OrgUsage, portalUrl: String, liveOrgId: String? = nil) {
         self.id = id
         self.name = name
         self.plan = plan
@@ -2050,6 +2103,9 @@ public struct Org: Codable, Sendable, Equatable {
         self.trackingToken = trackingToken
         self.payoutKycRequired = payoutKycRequired
         self.livemode = livemode
+        self.limits = limits
+        self.usage = usage
+        self.portalUrl = portalUrl
         self.liveOrgId = liveOrgId
     }
 }
@@ -2088,6 +2144,8 @@ public struct IssuedApiKey: Codable, Sendable, Equatable {
     public var owner: String?
     public var expiresAt: String?
     public var pairId: String?
+    /// The programs this key is limited to; null = the whole org.
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -2100,9 +2158,10 @@ public struct IssuedApiKey: Codable, Sendable, Equatable {
         case owner = "owner"
         case expiresAt = "expiresAt"
         case pairId = "pairId"
+        case programIds = "programIds"
     }
 
-    public init(id: String, key: String, scopes: [String], publishable: Bool, allowedOrigins: [String], apiVersion: String, livemode: Bool, owner: String? = nil, expiresAt: String? = nil, pairId: String? = nil) {
+    public init(id: String, key: String, scopes: [String], publishable: Bool, allowedOrigins: [String], apiVersion: String, livemode: Bool, owner: String? = nil, expiresAt: String? = nil, pairId: String? = nil, programIds: [String]? = nil) {
         self.id = id
         self.key = key
         self.scopes = scopes
@@ -2113,6 +2172,7 @@ public struct IssuedApiKey: Codable, Sendable, Equatable {
         self.owner = owner
         self.expiresAt = expiresAt
         self.pairId = pairId
+        self.programIds = programIds
     }
 }
 
@@ -2145,6 +2205,8 @@ public struct ApiKey: Codable, Sendable, Equatable {
     public var owner: String?
     /// Shared by a live/test pair minted together.
     public var pairId: String?
+    /// The programs this key is limited to; null = the whole org.
+    public var programIds: [String]?
     public var createdBy: ApiKeyCreatedByOption1?
     public var expiresAt: String?
     public var expired: Bool
@@ -2164,6 +2226,7 @@ public struct ApiKey: Codable, Sendable, Equatable {
         case livemode = "livemode"
         case owner = "owner"
         case pairId = "pairId"
+        case programIds = "programIds"
         case createdBy = "createdBy"
         case expiresAt = "expiresAt"
         case expired = "expired"
@@ -2172,7 +2235,7 @@ public struct ApiKey: Codable, Sendable, Equatable {
         case revokedAt = "revokedAt"
     }
 
-    public init(id: String, name: String, prefix: String, scopes: [String], apiVersion: String, publishable: Bool, allowedOrigins: [String], livemode: Bool, owner: String? = nil, pairId: String? = nil, createdBy: ApiKeyCreatedByOption1? = nil, expiresAt: String? = nil, expired: Bool, lastUsedAt: String? = nil, createdAt: String, revokedAt: String? = nil) {
+    public init(id: String, name: String, prefix: String, scopes: [String], apiVersion: String, publishable: Bool, allowedOrigins: [String], livemode: Bool, owner: String? = nil, pairId: String? = nil, programIds: [String]? = nil, createdBy: ApiKeyCreatedByOption1? = nil, expiresAt: String? = nil, expired: Bool, lastUsedAt: String? = nil, createdAt: String, revokedAt: String? = nil) {
         self.id = id
         self.name = name
         self.prefix = prefix
@@ -2183,6 +2246,7 @@ public struct ApiKey: Codable, Sendable, Equatable {
         self.livemode = livemode
         self.owner = owner
         self.pairId = pairId
+        self.programIds = programIds
         self.createdBy = createdBy
         self.expiresAt = expiresAt
         self.expired = expired
@@ -2217,6 +2281,8 @@ public struct AuthConnection: Codable, Sendable, Equatable {
     public var rotation: AuthConnectionRotation
     /// Signed-protocol connections: the Atlas instance, or a custom label.
     public var instanceId: String?
+    /// Atlas connections serving an Atlas ID app instead of an instance.
+    public var appId: String?
     public var autoEnrollUsers: Bool?
     public var destinationUrl: String?
     public var signatureVersion: String?
@@ -2232,13 +2298,14 @@ public struct AuthConnection: Codable, Sendable, Equatable {
         case createdAt = "createdAt"
         case rotation = "rotation"
         case instanceId = "instanceId"
+        case appId = "appId"
         case autoEnrollUsers = "autoEnrollUsers"
         case destinationUrl = "destinationUrl"
         case signatureVersion = "signatureVersion"
         case requiresV2 = "requiresV2"
     }
 
-    public init(id: String, provider: String, programId: String, name: String, status: String, createdAt: String, rotation: AuthConnectionRotation, instanceId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil) {
+    public init(id: String, provider: String, programId: String, name: String, status: String, createdAt: String, rotation: AuthConnectionRotation, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil) {
         self.id = id
         self.provider = provider
         self.programId = programId
@@ -2247,6 +2314,7 @@ public struct AuthConnection: Codable, Sendable, Equatable {
         self.createdAt = createdAt
         self.rotation = rotation
         self.instanceId = instanceId
+        self.appId = appId
         self.autoEnrollUsers = autoEnrollUsers
         self.destinationUrl = destinationUrl
         self.signatureVersion = signatureVersion
@@ -2267,6 +2335,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
     /// Signed-protocol connections (atlas, custom).
     public var programId: String?
     public var instanceId: String?
+    public var appId: String?
     public var autoEnrollUsers: Bool?
     public var destinationUrl: String?
     public var signupsUrl: String?
@@ -2282,6 +2351,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case metadataKeys = "metadataKeys"
         case programId = "programId"
         case instanceId = "instanceId"
+        case appId = "appId"
         case autoEnrollUsers = "autoEnrollUsers"
         case destinationUrl = "destinationUrl"
         case signupsUrl = "signupsUrl"
@@ -2289,7 +2359,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case exportUrl = "exportUrl"
     }
 
-    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil) {
+    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil) {
         self.id = id
         self.provider = provider
         self.secret = secret
@@ -2298,6 +2368,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         self.metadataKeys = metadataKeys
         self.programId = programId
         self.instanceId = instanceId
+        self.appId = appId
         self.autoEnrollUsers = autoEnrollUsers
         self.destinationUrl = destinationUrl
         self.signupsUrl = signupsUrl
@@ -4694,6 +4765,15 @@ public struct CommissionSettledEventData: Codable, Sendable, Equatable {
     public var currency: String
     public var method: String
     public var reference: String
+    public var customerRef: String?
+    public var billingEventId: String?
+    /// The billing provider's own event id.
+    public var providerEventId: String?
+    public var invoiceRef: String?
+    /// Your own id for the customer when known (an auth-connection user id), or null.
+    public var customerExternalRef: String?
+    /// Your own id for the partner to credit: this program's externalRef for them, else the partner's.
+    public var partnerExternalRef: String?
 
     enum CodingKeys: String, CodingKey {
         case commissionId = "commissionId"
@@ -4704,9 +4784,15 @@ public struct CommissionSettledEventData: Codable, Sendable, Equatable {
         case currency = "currency"
         case method = "method"
         case reference = "reference"
+        case customerRef = "customerRef"
+        case billingEventId = "billingEventId"
+        case providerEventId = "providerEventId"
+        case invoiceRef = "invoiceRef"
+        case customerExternalRef = "customerExternalRef"
+        case partnerExternalRef = "partnerExternalRef"
     }
 
-    public init(commissionId: String, partnerId: String, programId: String, referralId: String? = nil, amountMinor: Int, currency: String, method: String, reference: String) {
+    public init(commissionId: String, partnerId: String, programId: String, referralId: String? = nil, amountMinor: Int, currency: String, method: String, reference: String, customerRef: String? = nil, billingEventId: String? = nil, providerEventId: String? = nil, invoiceRef: String? = nil, customerExternalRef: String? = nil, partnerExternalRef: String? = nil) {
         self.commissionId = commissionId
         self.partnerId = partnerId
         self.programId = programId
@@ -4715,6 +4801,12 @@ public struct CommissionSettledEventData: Codable, Sendable, Equatable {
         self.currency = currency
         self.method = method
         self.reference = reference
+        self.customerRef = customerRef
+        self.billingEventId = billingEventId
+        self.providerEventId = providerEventId
+        self.invoiceRef = invoiceRef
+        self.customerExternalRef = customerExternalRef
+        self.partnerExternalRef = partnerExternalRef
     }
 }
 
@@ -5888,6 +5980,186 @@ public struct WebhookEndpointFailingEvent: Codable, Sendable, Equatable {
     }
 }
 
+/// `data` of a `stripe_credit.applied` event: The Stripe balance credit rail applied a credit (or a reversal debit) to a Stripe customer balance with your key. `stripeBalanceTransactionId` is the Stripe balance transaction.
+public struct StripeCreditAppliedEventData: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    public var currency: String
+    public var stripeCustomerId: String?
+    public var status: String
+    public var attempts: Int
+    public var stripeBalanceTransactionId: String?
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case stripeCustomerId = "stripeCustomerId"
+        case status = "status"
+        case attempts = "attempts"
+        case stripeBalanceTransactionId = "stripeBalanceTransactionId"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.stripeCustomerId = stripeCustomerId
+        self.status = status
+        self.attempts = attempts
+        self.stripeBalanceTransactionId = stripeBalanceTransactionId
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// A Stripe balance credit or debit was applied: the `stripe_credit.applied` delivery body.
+public struct StripeCreditAppliedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: StripeCreditAppliedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: StripeCreditAppliedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `stripe_credit.failed` event: The Stripe balance credit rail stopped retrying a credit or debit after its last attempt: no Stripe customer matched (`no_customer`) or Stripe refused it (`failed`). `lastError` says why.
+public struct StripeCreditFailedEventData: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    public var currency: String
+    public var stripeCustomerId: String?
+    public var status: String
+    public var attempts: Int
+    public var stripeBalanceTransactionId: String?
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case stripeCustomerId = "stripeCustomerId"
+        case status = "status"
+        case attempts = "attempts"
+        case stripeBalanceTransactionId = "stripeBalanceTransactionId"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.stripeCustomerId = stripeCustomerId
+        self.status = status
+        self.attempts = attempts
+        self.stripeBalanceTransactionId = stripeBalanceTransactionId
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// A Stripe balance credit or debit gave up: the `stripe_credit.failed` delivery body.
+public struct StripeCreditFailedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: StripeCreditFailedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: StripeCreditFailedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
 /// `data` of a `webhook_endpoint.recovered` event: Sent to your active endpoints, including the recovered one, when a delivery succeeds after the endpoint was failing.
 public struct WebhookEndpointRecoveredEventData: Codable, Sendable, Equatable {
     public var endpointId: String
@@ -6210,6 +6482,82 @@ public struct PostTOrgTokenMobileInstallResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetWellKnownReferalliEmbedJsonResponseSurfacesValueStorageItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var type: String
+    public var category: String
+    public var lifetime: String
+    public var purpose: [String: String]
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case type = "type"
+        case category = "category"
+        case lifetime = "lifetime"
+        case purpose = "purpose"
+    }
+
+    public init(name: String, type: String, category: String, lifetime: String, purpose: [String: String]) {
+        self.name = name
+        self.type = type
+        self.category = category
+        self.lifetime = lifetime
+        self.purpose = purpose
+    }
+}
+
+public struct GetWellKnownReferalliEmbedJsonResponseSurfacesValue: Codable, Sendable, Equatable {
+    public var csp: [String: [String]]
+    public var consentCategory: String
+    public var storage: [GetWellKnownReferalliEmbedJsonResponseSurfacesValueStorageItem]
+
+    enum CodingKeys: String, CodingKey {
+        case csp = "csp"
+        case consentCategory = "consentCategory"
+        case storage = "storage"
+    }
+
+    public init(csp: [String: [String]], consentCategory: String, storage: [GetWellKnownReferalliEmbedJsonResponseSurfacesValueStorageItem]) {
+        self.csp = csp
+        self.consentCategory = consentCategory
+        self.storage = storage
+    }
+}
+
+/// An embed-v1 manifest (https://cookiemunch.net/schemas/embed-v1.json).
+public struct GetWellKnownReferalliEmbedJsonResponse: Codable, Sendable, Equatable {
+    public var schema: String
+    public var product: String
+    public var updated: String
+    public var openapi: String
+    public var status: String
+    public var docs: String
+    public var surfaces: [String: GetWellKnownReferalliEmbedJsonResponseSurfacesValue]
+    public var changes: [JSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case schema = "schema"
+        case product = "product"
+        case updated = "updated"
+        case openapi = "openapi"
+        case status = "status"
+        case docs = "docs"
+        case surfaces = "surfaces"
+        case changes = "changes"
+    }
+
+    public init(schema: String, product: String, updated: String, openapi: String, status: String, docs: String, surfaces: [String: GetWellKnownReferalliEmbedJsonResponseSurfacesValue], changes: [JSONValue]) {
+        self.schema = schema
+        self.product = product
+        self.updated = updated
+        self.openapi = openapi
+        self.status = status
+        self.docs = docs
+        self.surfaces = surfaces
+        self.changes = changes
+    }
+}
+
 public struct GetWellKnownAppleAppSiteAssociationResponseApplinksDetailsItemComponentsItem: Codable, Sendable, Equatable {
     public var value: String
 
@@ -6295,252 +6643,6 @@ public struct GetWellKnownAssetlinksJsonResponseValueItem: Codable, Sendable, Eq
 }
 
 public typealias GetWellKnownAssetlinksJsonResponse = [GetWellKnownAssetlinksJsonResponseValueItem]
-
-public struct GetWellKnownForgedeckEmbedJsonResponseCheckers: Codable, Sendable, Equatable {
-    public var userAgent: String
-    public var egress: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case userAgent = "userAgent"
-        case egress = "egress"
-    }
-
-    public init(userAgent: String, egress: [String]) {
-        self.userAgent = userAgent
-        self.egress = egress
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetCookieDaysOption2: Codable, Sendable, Equatable {
-    public var `default`: Int
-    public var max: Int
-    public var note: String
-
-    enum CodingKeys: String, CodingKey {
-        case `default` = "default"
-        case max = "max"
-        case note = "note"
-    }
-
-    public init(`default`: Int, max: Int, note: String) {
-        self.`default` = `default`
-        self.max = max
-        self.note = note
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItemPurpose: Codable, Sendable, Equatable {
-    public var en: String
-
-    enum CodingKeys: String, CodingKey {
-        case en = "en"
-    }
-
-    public init(en: String) {
-        self.en = en
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItem: Codable, Sendable, Equatable {
-    public var name: String
-    public var type: String
-    public var category: String
-    public var lifetime: String
-    public var purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItemPurpose
-    public var legacy: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case name = "name"
-        case type = "type"
-        case category = "category"
-        case lifetime = "lifetime"
-        case purpose = "purpose"
-        case legacy = "legacy"
-    }
-
-    public init(name: String, type: String, category: String, lifetime: String, purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItemPurpose, legacy: Bool? = nil) {
-        self.name = name
-        self.type = type
-        self.category = category
-        self.lifetime = lifetime
-        self.purpose = purpose
-        self.legacy = legacy
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippet: Codable, Sendable, Equatable {
-    public var script: String
-    public var csp: [String: [String]]
-    public var consentCategory: String
-    public var consentFallbackCategory: String
-    public var consentAdapters: [String]
-    public var consentDefault: [String: JSONValue]?
-    public var cookieDays: JSONValue
-    public var storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItem]
-
-    enum CodingKeys: String, CodingKey {
-        case script = "script"
-        case csp = "csp"
-        case consentCategory = "consentCategory"
-        case consentFallbackCategory = "consentFallbackCategory"
-        case consentAdapters = "consentAdapters"
-        case consentDefault = "consentDefault"
-        case cookieDays = "cookieDays"
-        case storage = "storage"
-    }
-
-    public init(script: String, csp: [String: [String]], consentCategory: String, consentFallbackCategory: String, consentAdapters: [String], consentDefault: [String: JSONValue]? = nil, cookieDays: JSONValue, storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippetStorageItem]) {
-        self.script = script
-        self.csp = csp
-        self.consentCategory = consentCategory
-        self.consentFallbackCategory = consentFallbackCategory
-        self.consentAdapters = consentAdapters
-        self.consentDefault = consentDefault
-        self.cookieDays = cookieDays
-        self.storage = storage
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItemPurpose: Codable, Sendable, Equatable {
-    public var en: String
-
-    enum CodingKeys: String, CodingKey {
-        case en = "en"
-    }
-
-    public init(en: String) {
-        self.en = en
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItem: Codable, Sendable, Equatable {
-    public var name: String
-    public var type: String
-    public var category: String
-    public var lifetime: String
-    public var purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItemPurpose
-    public var legacy: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case name = "name"
-        case type = "type"
-        case category = "category"
-        case lifetime = "lifetime"
-        case purpose = "purpose"
-        case legacy = "legacy"
-    }
-
-    public init(name: String, type: String, category: String, lifetime: String, purpose: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItemPurpose, legacy: Bool? = nil) {
-        self.name = name
-        self.type = type
-        self.category = category
-        self.lifetime = lifetime
-        self.purpose = purpose
-        self.legacy = legacy
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbed: Codable, Sendable, Equatable {
-    public var script: String
-    public var csp: [String: [String]]
-    public var consentCategory: String
-    public var storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItem]
-
-    enum CodingKeys: String, CodingKey {
-        case script = "script"
-        case csp = "csp"
-        case consentCategory = "consentCategory"
-        case storage = "storage"
-    }
-
-    public init(script: String, csp: [String: [String]], consentCategory: String, storage: [GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbedStorageItem]) {
-        self.script = script
-        self.csp = csp
-        self.consentCategory = consentCategory
-        self.storage = storage
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseSurfaces: Codable, Sendable, Equatable {
-    public var trackingSnippet: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippet
-    public var portalEmbed: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbed
-
-    enum CodingKeys: String, CodingKey {
-        case trackingSnippet = "tracking-snippet"
-        case portalEmbed = "portal-embed"
-    }
-
-    public init(trackingSnippet: GetWellKnownForgedeckEmbedJsonResponseSurfacesTrackingSnippet, portalEmbed: GetWellKnownForgedeckEmbedJsonResponseSurfacesPortalEmbed) {
-        self.trackingSnippet = trackingSnippet
-        self.portalEmbed = portalEmbed
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponseChangesItem: Codable, Sendable, Equatable {
-    public var effective: String
-    public var surface: String
-    public var add: [String]?
-    public var remove: [String]?
-    public var note: String
-
-    enum CodingKeys: String, CodingKey {
-        case effective = "effective"
-        case surface = "surface"
-        case add = "add"
-        case remove = "remove"
-        case note = "note"
-    }
-
-    public init(effective: String, surface: String, add: [String]? = nil, remove: [String]? = nil, note: String) {
-        self.effective = effective
-        self.surface = surface
-        self.add = add
-        self.remove = remove
-        self.note = note
-    }
-}
-
-public struct GetWellKnownForgedeckEmbedJsonResponse: Codable, Sendable, Equatable {
-    public var schema: String
-    public var product: String
-    public var updated: String
-    public var openapi: String
-    public var llms: String
-    public var status: String
-    public var docs: String
-    public var checkers: GetWellKnownForgedeckEmbedJsonResponseCheckers
-    public var org: String?
-    public var surfaces: GetWellKnownForgedeckEmbedJsonResponseSurfaces
-    public var changes: [GetWellKnownForgedeckEmbedJsonResponseChangesItem]
-
-    enum CodingKeys: String, CodingKey {
-        case schema = "schema"
-        case product = "product"
-        case updated = "updated"
-        case openapi = "openapi"
-        case llms = "llms"
-        case status = "status"
-        case docs = "docs"
-        case checkers = "checkers"
-        case org = "org"
-        case surfaces = "surfaces"
-        case changes = "changes"
-    }
-
-    public init(schema: String, product: String, updated: String, openapi: String, llms: String, status: String, docs: String, checkers: GetWellKnownForgedeckEmbedJsonResponseCheckers, org: String? = nil, surfaces: GetWellKnownForgedeckEmbedJsonResponseSurfaces, changes: [GetWellKnownForgedeckEmbedJsonResponseChangesItem]) {
-        self.schema = schema
-        self.product = product
-        self.updated = updated
-        self.openapi = openapi
-        self.llms = llms
-        self.status = status
-        self.docs = docs
-        self.checkers = checkers
-        self.org = org
-        self.surfaces = surfaces
-        self.changes = changes
-    }
-}
 
 public struct PostAgentsRegisterResponse: Codable, Sendable, Equatable {
     public var agentId: String
@@ -6781,6 +6883,8 @@ public struct GetMeResponseApiKey: Codable, Sendable, Equatable {
     public var publishable: Bool
     public var owner: String?
     public var expiresAt: String?
+    /// The programs this key is limited to; null = the whole org.
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -6792,9 +6896,10 @@ public struct GetMeResponseApiKey: Codable, Sendable, Equatable {
         case publishable = "publishable"
         case owner = "owner"
         case expiresAt = "expiresAt"
+        case programIds = "programIds"
     }
 
-    public init(id: String, name: String, prefix: String, scopes: [String], apiVersion: String? = nil, livemode: Bool, publishable: Bool, owner: String? = nil, expiresAt: String? = nil) {
+    public init(id: String, name: String, prefix: String, scopes: [String], apiVersion: String? = nil, livemode: Bool, publishable: Bool, owner: String? = nil, expiresAt: String? = nil, programIds: [String]? = nil) {
         self.id = id
         self.name = name
         self.prefix = prefix
@@ -6804,6 +6909,7 @@ public struct GetMeResponseApiKey: Codable, Sendable, Equatable {
         self.publishable = publishable
         self.owner = owner
         self.expiresAt = expiresAt
+        self.programIds = programIds
     }
 }
 
@@ -7141,6 +7247,8 @@ public struct GetHostsCurrentResponseValueOption1: Codable, Sendable, Equatable 
     public var branding: GetHostsCurrentResponseValueOption1Branding
     /// The org's active programs with a public signup page (/join/:handle).
     public var programs: [GetHostsCurrentResponseValueOption1ProgramsItem]
+    /// Portal design: colour scheme, brand lockup, font stylesheet, announcement, header and footer, home and navigation layout, string overrides, embed switches (the look itself is /v1/hosts/current/theme.css).
+    public var portalTheme: [String: JSONValue]
     public var consent: GetHostsCurrentResponseValueOption1Consent
     public var chat: GetHostsCurrentResponseValueOption1ChatOption1?
     /// The Content-Security-Policy for this host's pages, built from the enabled adapters.
@@ -7152,17 +7260,19 @@ public struct GetHostsCurrentResponseValueOption1: Codable, Sendable, Equatable 
         case orgName = "orgName"
         case branding = "branding"
         case programs = "programs"
+        case portalTheme = "portalTheme"
         case consent = "consent"
         case chat = "chat"
         case csp = "csp"
     }
 
-    public init(kind: String, orgId: String, orgName: String, branding: GetHostsCurrentResponseValueOption1Branding, programs: [GetHostsCurrentResponseValueOption1ProgramsItem], consent: GetHostsCurrentResponseValueOption1Consent, chat: GetHostsCurrentResponseValueOption1ChatOption1? = nil, csp: String) {
+    public init(kind: String, orgId: String, orgName: String, branding: GetHostsCurrentResponseValueOption1Branding, programs: [GetHostsCurrentResponseValueOption1ProgramsItem], portalTheme: [String: JSONValue], consent: GetHostsCurrentResponseValueOption1Consent, chat: GetHostsCurrentResponseValueOption1ChatOption1? = nil, csp: String) {
         self.kind = kind
         self.orgId = orgId
         self.orgName = orgName
         self.branding = branding
         self.programs = programs
+        self.portalTheme = portalTheme
         self.consent = consent
         self.chat = chat
         self.csp = csp
@@ -7201,25 +7311,19 @@ public struct GetHostsCurrentResponseValueOption3: Codable, Sendable, Equatable 
 public typealias GetHostsCurrentResponse = JSONValue
 
 public struct GetChatlyIdentityResponseIdentityOption1: Codable, Sendable, Equatable {
-    /// `merchant:<user id>` or `partner:<partner account id>`.
+    /// `merchant:<user id>` or `partner:<partner account id>`: kept on the page to notice an account switch, not sent to Chatly.
     public var externalId: String
-    public var email: String
-    public var name: String?
-    /// HMAC-SHA256 of `externalId` (hex), for the widget's identity verification.
-    public var userHash: String
+    /// Atlas's Chatly token for this session (at most 120 s): pass it to the widget as `userToken`.
+    public var userToken: String
 
     enum CodingKeys: String, CodingKey {
         case externalId = "externalId"
-        case email = "email"
-        case name = "name"
-        case userHash = "userHash"
+        case userToken = "userToken"
     }
 
-    public init(externalId: String, email: String, name: String? = nil, userHash: String) {
+    public init(externalId: String, userToken: String) {
         self.externalId = externalId
-        self.email = email
-        self.name = name
-        self.userHash = userHash
+        self.userToken = userToken
     }
 }
 
@@ -7787,11 +7891,37 @@ public struct GetProgramsResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostProgramsIdReferrersResponse: Codable, Sendable, Equatable {
+    public var partnerId: String
+    public var programId: String
+    public var externalRef: String
+    public var code: String
+    public var linkUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partnerId"
+        case programId = "programId"
+        case externalRef = "externalRef"
+        case code = "code"
+        case linkUrl = "linkUrl"
+    }
+
+    public init(partnerId: String, programId: String, externalRef: String, code: String, linkUrl: String? = nil) {
+        self.partnerId = partnerId
+        self.programId = programId
+        self.externalRef = externalRef
+        self.code = code
+        self.linkUrl = linkUrl
+    }
+}
+
 public struct GetProgramsIdEnrollmentsResponseDataItem: Codable, Sendable, Equatable {
     public var id: String
     public var partnerId: String
     public var partnerEmail: String
     public var partnerName: String
+    /// This program's own externalRef for the partner, when it differs from the partner's.
+    public var externalRef: String?
     public var status: String
     public var createdAt: String
     public var networkWarning: NetworkWarning
@@ -7801,16 +7931,18 @@ public struct GetProgramsIdEnrollmentsResponseDataItem: Codable, Sendable, Equat
         case partnerId = "partnerId"
         case partnerEmail = "partnerEmail"
         case partnerName = "partnerName"
+        case externalRef = "externalRef"
         case status = "status"
         case createdAt = "createdAt"
         case networkWarning = "networkWarning"
     }
 
-    public init(id: String, partnerId: String, partnerEmail: String, partnerName: String, status: String, createdAt: String, networkWarning: NetworkWarning) {
+    public init(id: String, partnerId: String, partnerEmail: String, partnerName: String, externalRef: String? = nil, status: String, createdAt: String, networkWarning: NetworkWarning) {
         self.id = id
         self.partnerId = partnerId
         self.partnerEmail = partnerEmail
         self.partnerName = partnerName
+        self.externalRef = externalRef
         self.status = status
         self.createdAt = createdAt
         self.networkWarning = networkWarning
@@ -7899,6 +8031,8 @@ public struct GetPartnersIdEnrollmentsResponseDataItem: Codable, Sendable, Equat
     public var programName: String
     public var status: String
     public var groupId: String?
+    /// This program's own externalRef for the partner, or null (the partner's own applies).
+    public var externalRef: String?
     public var createdAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -7907,15 +8041,17 @@ public struct GetPartnersIdEnrollmentsResponseDataItem: Codable, Sendable, Equat
         case programName = "programName"
         case status = "status"
         case groupId = "groupId"
+        case externalRef = "externalRef"
         case createdAt = "createdAt"
     }
 
-    public init(id: String, programId: String, programName: String, status: String, groupId: String? = nil, createdAt: String) {
+    public init(id: String, programId: String, programName: String, status: String, groupId: String? = nil, externalRef: String? = nil, createdAt: String) {
         self.id = id
         self.programId = programId
         self.programName = programName
         self.status = status
         self.groupId = groupId
+        self.externalRef = externalRef
         self.createdAt = createdAt
     }
 }
@@ -7992,19 +8128,22 @@ public struct PatchApiKeysIdResponse: Codable, Sendable, Equatable {
     public var apiVersion: String
     public var owner: String?
     public var expiresAt: String?
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
         case apiVersion = "apiVersion"
         case owner = "owner"
         case expiresAt = "expiresAt"
+        case programIds = "programIds"
     }
 
-    public init(id: String, apiVersion: String, owner: String? = nil, expiresAt: String? = nil) {
+    public init(id: String, apiVersion: String, owner: String? = nil, expiresAt: String? = nil, programIds: [String]? = nil) {
         self.id = id
         self.apiVersion = apiVersion
         self.owner = owner
         self.expiresAt = expiresAt
+        self.programIds = programIds
     }
 }
 
@@ -8726,6 +8865,120 @@ public struct GetPartnersIdBalancesResponse: Codable, Sendable, Equatable {
         self.data = data
         self.hasMore = hasMore
         self.nextCursor = nextCursor
+    }
+}
+
+public struct GetPartnersIdStatsResponseReferrals: Codable, Sendable, Equatable {
+    public var total: Int
+    public var active: Int
+    public var pendingReview: Int
+    public var paused: Int
+    public var void: Int
+
+    enum CodingKeys: String, CodingKey {
+        case total = "total"
+        case active = "active"
+        case pendingReview = "pendingReview"
+        case paused = "paused"
+        case void = "void"
+    }
+
+    public init(total: Int, active: Int, pendingReview: Int, paused: Int, void: Int) {
+        self.total = total
+        self.active = active
+        self.pendingReview = pendingReview
+        self.paused = paused
+        self.void = void
+    }
+}
+
+public struct GetPartnersIdStatsResponse: Codable, Sendable, Equatable {
+    public var partnerId: String
+    public var programId: String?
+    /// Eligible clicks on their links.
+    public var clicks: Int
+    public var referrals: GetPartnersIdStatsResponseReferrals
+    /// Referred customers (not void) with at least one payment.
+    public var convertedCustomers: Int
+    public var balances: [Balance]
+
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partnerId"
+        case programId = "programId"
+        case clicks = "clicks"
+        case referrals = "referrals"
+        case convertedCustomers = "convertedCustomers"
+        case balances = "balances"
+    }
+
+    public init(partnerId: String, programId: String? = nil, clicks: Int, referrals: GetPartnersIdStatsResponseReferrals, convertedCustomers: Int, balances: [Balance]) {
+        self.partnerId = partnerId
+        self.programId = programId
+        self.clicks = clicks
+        self.referrals = referrals
+        self.convertedCustomers = convertedCustomers
+        self.balances = balances
+    }
+}
+
+public struct GetPartnersIdSummaryResponseReferrals: Codable, Sendable, Equatable {
+    public var total: Int
+    public var active: Int
+    public var pendingReview: Int
+    public var paused: Int
+    public var void: Int
+
+    enum CodingKeys: String, CodingKey {
+        case total = "total"
+        case active = "active"
+        case pendingReview = "pendingReview"
+        case paused = "paused"
+        case void = "void"
+    }
+
+    public init(total: Int, active: Int, pendingReview: Int, paused: Int, void: Int) {
+        self.total = total
+        self.active = active
+        self.pendingReview = pendingReview
+        self.paused = paused
+        self.void = void
+    }
+}
+
+public struct GetPartnersIdSummaryResponse: Codable, Sendable, Equatable {
+    public var partnerId: String
+    public var programId: String?
+    /// Eligible clicks on their links.
+    public var clicks: Int
+    public var referrals: GetPartnersIdSummaryResponseReferrals
+    /// Referred customers (not void) with at least one payment.
+    public var convertedCustomers: Int
+    public var balances: [Balance]
+    /// Their current code in the program (coupon, else link).
+    public var code: String?
+    /// Their newest link in the program; null when they have only a coupon.
+    public var linkUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partnerId"
+        case programId = "programId"
+        case clicks = "clicks"
+        case referrals = "referrals"
+        case convertedCustomers = "convertedCustomers"
+        case balances = "balances"
+        case code = "code"
+        case linkUrl = "linkUrl"
+    }
+
+    public init(partnerId: String, programId: String? = nil, clicks: Int, referrals: GetPartnersIdSummaryResponseReferrals, convertedCustomers: Int, balances: [Balance], code: String? = nil, linkUrl: String? = nil) {
+        self.partnerId = partnerId
+        self.programId = programId
+        self.clicks = clicks
+        self.referrals = referrals
+        self.convertedCustomers = convertedCustomers
+        self.balances = balances
+        self.code = code
+        self.linkUrl = linkUrl
     }
 }
 
@@ -10365,6 +10618,33 @@ public struct GetPartnerMeResponseAccount: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetPartnerMeResponseRestricted: Codable, Sendable, Equatable {
+    public var orgId: String
+    public var orgName: String
+    public var partnerId: String
+    public var partnerName: String
+    public var programId: String
+    public var programName: String
+
+    enum CodingKeys: String, CodingKey {
+        case orgId = "orgId"
+        case orgName = "orgName"
+        case partnerId = "partnerId"
+        case partnerName = "partnerName"
+        case programId = "programId"
+        case programName = "programName"
+    }
+
+    public init(orgId: String, orgName: String, partnerId: String, partnerName: String, programId: String, programName: String) {
+        self.orgId = orgId
+        self.orgName = orgName
+        self.partnerId = partnerId
+        self.partnerName = partnerName
+        self.programId = programId
+        self.programName = programName
+    }
+}
+
 public struct GetPartnerMeResponseMembershipsItemProgramsItem: Codable, Sendable, Equatable {
     public var programId: String
     public var name: String
@@ -10412,15 +10692,18 @@ public struct GetPartnerMeResponseMembershipsItem: Codable, Sendable, Equatable 
 
 public struct GetPartnerMeResponse: Codable, Sendable, Equatable {
     public var account: GetPartnerMeResponseAccount?
+    public var restricted: GetPartnerMeResponseRestricted?
     public var memberships: [GetPartnerMeResponseMembershipsItem]
 
     enum CodingKeys: String, CodingKey {
         case account = "account"
+        case restricted = "restricted"
         case memberships = "memberships"
     }
 
-    public init(account: GetPartnerMeResponseAccount? = nil, memberships: [GetPartnerMeResponseMembershipsItem]) {
+    public init(account: GetPartnerMeResponseAccount? = nil, restricted: GetPartnerMeResponseRestricted? = nil, memberships: [GetPartnerMeResponseMembershipsItem]) {
         self.account = account
+        self.restricted = restricted
         self.memberships = memberships
     }
 }
@@ -10882,6 +11165,121 @@ public struct PostPartnerProgramsProgramIdApplyResponse: Codable, Sendable, Equa
     public init(enrollmentId: String, status: String) {
         self.enrollmentId = enrollmentId
         self.status = status
+    }
+}
+
+public struct GetPartnerApiTokensResponseDataItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    /// The first characters, to tell tokens apart.
+    public var prefix: String
+    public var scopes: [String]
+    public var createdAt: String
+    public var lastUsedAt: String?
+    public var expiresAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case prefix = "prefix"
+        case scopes = "scopes"
+        case createdAt = "createdAt"
+        case lastUsedAt = "lastUsedAt"
+        case expiresAt = "expiresAt"
+    }
+
+    public init(id: String, name: String, prefix: String, scopes: [String], createdAt: String, lastUsedAt: String? = nil, expiresAt: String? = nil) {
+        self.id = id
+        self.name = name
+        self.prefix = prefix
+        self.scopes = scopes
+        self.createdAt = createdAt
+        self.lastUsedAt = lastUsedAt
+        self.expiresAt = expiresAt
+    }
+}
+
+public struct GetPartnerApiTokensResponse: Codable, Sendable, Equatable {
+    public var object: String
+    public var data: [GetPartnerApiTokensResponseDataItem]
+    public var hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case object = "object"
+        case data = "data"
+        case hasMore = "has_more"
+    }
+
+    public init(object: String, data: [GetPartnerApiTokensResponseDataItem], hasMore: Bool) {
+        self.object = object
+        self.data = data
+        self.hasMore = hasMore
+    }
+}
+
+public struct PostPartnerApiTokensResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    /// The first characters, to tell tokens apart.
+    public var prefix: String
+    public var scopes: [String]
+    public var createdAt: String
+    public var lastUsedAt: String?
+    public var expiresAt: String?
+    /// The rpt_ token. Shown once.
+    public var token: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case name = "name"
+        case prefix = "prefix"
+        case scopes = "scopes"
+        case createdAt = "createdAt"
+        case lastUsedAt = "lastUsedAt"
+        case expiresAt = "expiresAt"
+        case token = "token"
+    }
+
+    public init(id: String, name: String, prefix: String, scopes: [String], createdAt: String, lastUsedAt: String? = nil, expiresAt: String? = nil, token: String) {
+        self.id = id
+        self.name = name
+        self.prefix = prefix
+        self.scopes = scopes
+        self.createdAt = createdAt
+        self.lastUsedAt = lastUsedAt
+        self.expiresAt = expiresAt
+        self.token = token
+    }
+}
+
+public struct DeletePartnerApiTokensIdResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var revoked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case revoked = "revoked"
+    }
+
+    public init(id: String, revoked: Bool) {
+        self.id = id
+        self.revoked = revoked
+    }
+}
+
+public struct PostPartnersIdPortalLinkResponse: Codable, Sendable, Equatable {
+    /// Single-use; opens the portal signed in, read-only, for this partner and program.
+    public var url: String
+    public var expiresAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case url = "url"
+        case expiresAt = "expiresAt"
+    }
+
+    public init(url: String, expiresAt: String) {
+        self.url = url
+        self.expiresAt = expiresAt
     }
 }
 
@@ -14969,6 +15367,19 @@ public struct GetAuthConnectionsIdExportResponse: Codable, Sendable, Equatable {
     }
 }
 
+/// What the connection takes beyond sign-ups: `partners` is user-chosen referral codes through `/partners`.
+public struct PostAuthConnectionsIdPingResponseCapabilities: Codable, Sendable, Equatable {
+    public var partners: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case partners = "partners"
+    }
+
+    public init(partners: Bool) {
+        self.partners = partners
+    }
+}
+
 public struct PostAuthConnectionsIdPingResponse: Codable, Sendable, Equatable {
     public var ok: Bool
     public var connectionId: String
@@ -14976,6 +15387,8 @@ public struct PostAuthConnectionsIdPingResponse: Codable, Sendable, Equatable {
     public var orgName: String
     public var autoEnrollUsers: Bool
     public var serverTime: String
+    /// What the connection takes beyond sign-ups: `partners` is user-chosen referral codes through `/partners`.
+    public var capabilities: PostAuthConnectionsIdPingResponseCapabilities
 
     enum CodingKeys: String, CodingKey {
         case ok = "ok"
@@ -14984,15 +15397,17 @@ public struct PostAuthConnectionsIdPingResponse: Codable, Sendable, Equatable {
         case orgName = "orgName"
         case autoEnrollUsers = "autoEnrollUsers"
         case serverTime = "serverTime"
+        case capabilities = "capabilities"
     }
 
-    public init(ok: Bool, connectionId: String, programId: String, orgName: String, autoEnrollUsers: Bool, serverTime: String) {
+    public init(ok: Bool, connectionId: String, programId: String, orgName: String, autoEnrollUsers: Bool, serverTime: String, capabilities: PostAuthConnectionsIdPingResponseCapabilities) {
         self.ok = ok
         self.connectionId = connectionId
         self.programId = programId
         self.orgName = orgName
         self.autoEnrollUsers = autoEnrollUsers
         self.serverTime = serverTime
+        self.capabilities = capabilities
     }
 }
 
@@ -15187,7 +15602,7 @@ public struct PostAuthConnectionsInstallResponse: Codable, Sendable, Equatable {
     }
 }
 
-public struct PostOauthTokenResponse: Codable, Sendable, Equatable {
+public struct PostOauthTokenResponseValueOption1: Codable, Sendable, Equatable {
     public var tokenType: String
     public var connectionId: String
     public var provider: String
@@ -15200,6 +15615,10 @@ public struct PostOauthTokenResponse: Codable, Sendable, Equatable {
     public var partnersUrl: String
     public var eraseUrl: String
     public var exportUrl: String
+    /// A one-hour `rat_…` token for this org, scoped `connections:write webhooks:write`: require v2 signatures and register the sync webhook.
+    public var accessToken: String
+    public var expiresIn: Int
+    public var scope: String
 
     enum CodingKeys: String, CodingKey {
         case tokenType = "token_type"
@@ -15213,9 +15632,12 @@ public struct PostOauthTokenResponse: Codable, Sendable, Equatable {
         case partnersUrl = "partnersUrl"
         case eraseUrl = "eraseUrl"
         case exportUrl = "exportUrl"
+        case accessToken = "access_token"
+        case expiresIn = "expires_in"
+        case scope = "scope"
     }
 
-    public init(tokenType: String, connectionId: String, provider: String, instanceId: String, programId: String, secret: String, reinstalled: Bool, signupsUrl: String, partnersUrl: String, eraseUrl: String, exportUrl: String) {
+    public init(tokenType: String, connectionId: String, provider: String, instanceId: String, programId: String, secret: String, reinstalled: Bool, signupsUrl: String, partnersUrl: String, eraseUrl: String, exportUrl: String, accessToken: String, expiresIn: Int, scope: String) {
         self.tokenType = tokenType
         self.connectionId = connectionId
         self.provider = provider
@@ -15227,6 +15649,163 @@ public struct PostOauthTokenResponse: Codable, Sendable, Equatable {
         self.partnersUrl = partnersUrl
         self.eraseUrl = eraseUrl
         self.exportUrl = exportUrl
+        self.accessToken = accessToken
+        self.expiresIn = expiresIn
+        self.scope = scope
+    }
+}
+
+public struct PostOauthTokenResponseValueOption2: Codable, Sendable, Equatable {
+    /// A one-hour `rat_…` bearer token (client_credentials or token exchange, REF-S28).
+    public var accessToken: String
+    public var tokenType: String
+    public var expiresIn: Int
+    public var scope: String
+    public var issuedTokenType: String?
+    public var resource: String?
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case tokenType = "token_type"
+        case expiresIn = "expires_in"
+        case scope = "scope"
+        case issuedTokenType = "issued_token_type"
+        case resource = "resource"
+    }
+
+    public init(accessToken: String, tokenType: String, expiresIn: Int, scope: String, issuedTokenType: String? = nil, resource: String? = nil) {
+        self.accessToken = accessToken
+        self.tokenType = tokenType
+        self.expiresIn = expiresIn
+        self.scope = scope
+        self.issuedTokenType = issuedTokenType
+        self.resource = resource
+    }
+}
+
+public typealias PostOauthTokenResponse = JSONValue
+
+public struct GetProductLinksResponse: Codable, Sendable, Equatable {
+    public var object: String
+    public var data: [DeleteProductLinksIdResponse]
+    public var nextCursor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case object = "object"
+        case data = "data"
+        case nextCursor = "next_cursor"
+    }
+
+    public init(object: String, data: [DeleteProductLinksIdResponse], nextCursor: String? = nil) {
+        self.object = object
+        self.data = data
+        self.nextCursor = nextCursor
+    }
+}
+
+public struct PostProductLinksResponse: Codable, Sendable, Equatable {
+    public var object: String
+    public var id: String
+    public var clientId: String
+    public var partner: String
+    public var name: String?
+    public var scopes: [String]
+    public var clientSecretPrefix: String
+    public var tokenEndpoint: String
+    public var authMethods: [String]
+    public var status: String
+    public var expiresAt: Int
+    public var revokedAt: Int?
+    public var lastUsedAt: Int?
+    public var createdAt: Int
+    /// Shown once.
+    public var clientSecret: String
+
+    enum CodingKeys: String, CodingKey {
+        case object = "object"
+        case id = "id"
+        case clientId = "client_id"
+        case partner = "partner"
+        case name = "name"
+        case scopes = "scopes"
+        case clientSecretPrefix = "client_secret_prefix"
+        case tokenEndpoint = "token_endpoint"
+        case authMethods = "auth_methods"
+        case status = "status"
+        case expiresAt = "expires_at"
+        case revokedAt = "revoked_at"
+        case lastUsedAt = "last_used_at"
+        case createdAt = "created_at"
+        case clientSecret = "client_secret"
+    }
+
+    public init(object: String, id: String, clientId: String, partner: String, name: String? = nil, scopes: [String], clientSecretPrefix: String, tokenEndpoint: String, authMethods: [String], status: String, expiresAt: Int, revokedAt: Int? = nil, lastUsedAt: Int? = nil, createdAt: Int, clientSecret: String) {
+        self.object = object
+        self.id = id
+        self.clientId = clientId
+        self.partner = partner
+        self.name = name
+        self.scopes = scopes
+        self.clientSecretPrefix = clientSecretPrefix
+        self.tokenEndpoint = tokenEndpoint
+        self.authMethods = authMethods
+        self.status = status
+        self.expiresAt = expiresAt
+        self.revokedAt = revokedAt
+        self.lastUsedAt = lastUsedAt
+        self.createdAt = createdAt
+        self.clientSecret = clientSecret
+    }
+}
+
+public struct DeleteProductLinksIdResponse: Codable, Sendable, Equatable {
+    public var object: String
+    public var id: String
+    public var clientId: String
+    public var partner: String
+    public var name: String?
+    public var scopes: [String]
+    public var clientSecretPrefix: String
+    public var tokenEndpoint: String
+    public var authMethods: [String]
+    public var status: String
+    public var expiresAt: Int
+    public var revokedAt: Int?
+    public var lastUsedAt: Int?
+    public var createdAt: Int
+
+    enum CodingKeys: String, CodingKey {
+        case object = "object"
+        case id = "id"
+        case clientId = "client_id"
+        case partner = "partner"
+        case name = "name"
+        case scopes = "scopes"
+        case clientSecretPrefix = "client_secret_prefix"
+        case tokenEndpoint = "token_endpoint"
+        case authMethods = "auth_methods"
+        case status = "status"
+        case expiresAt = "expires_at"
+        case revokedAt = "revoked_at"
+        case lastUsedAt = "last_used_at"
+        case createdAt = "created_at"
+    }
+
+    public init(object: String, id: String, clientId: String, partner: String, name: String? = nil, scopes: [String], clientSecretPrefix: String, tokenEndpoint: String, authMethods: [String], status: String, expiresAt: Int, revokedAt: Int? = nil, lastUsedAt: Int? = nil, createdAt: Int) {
+        self.object = object
+        self.id = id
+        self.clientId = clientId
+        self.partner = partner
+        self.name = name
+        self.scopes = scopes
+        self.clientSecretPrefix = clientSecretPrefix
+        self.tokenEndpoint = tokenEndpoint
+        self.authMethods = authMethods
+        self.status = status
+        self.expiresAt = expiresAt
+        self.revokedAt = revokedAt
+        self.lastUsedAt = lastUsedAt
+        self.createdAt = createdAt
     }
 }
 
@@ -16061,7 +16640,7 @@ public struct PostSupportAppsAdapterTestResponse: Codable, Sendable, Equatable {
     }
 }
 
-public typealias PostSupportCardsOrgIdAdapterResponse = [String: JSONValue]
+public typealias GetSupportPlatformChatlyAnswersResponse = [String: JSONValue]
 
 public struct GetPrivacyExecutorsResponseValueItemInstall: Codable, Sendable, Equatable {
     public var kind: String?
@@ -16424,6 +17003,288 @@ public struct GetOrgTrackingConsentResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetOrgConsentPartnersCookiemunchResponseStampCheck: Codable, Sendable, Equatable {
+    /// `live`: stamps are checked with Cookie Munch; `not_configured`: no partner token, stamps are kept as received.
+    public var status: String
+    public var detail: String
+
+    enum CodingKeys: String, CodingKey {
+        case status = "status"
+        case detail = "detail"
+    }
+
+    public init(status: String, detail: String) {
+        self.status = status
+        self.detail = detail
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchResponseGrantsItem: Codable, Sendable, Equatable {
+    public var cbid: String
+    public var state: String
+    public var linkId: String?
+    public var label: String?
+
+    enum CodingKeys: String, CodingKey {
+        case cbid = "cbid"
+        case state = "state"
+        case linkId = "linkId"
+        case label = "label"
+    }
+
+    public init(cbid: String, state: String, linkId: String? = nil, label: String? = nil) {
+        self.cbid = cbid
+        self.state = state
+        self.linkId = linkId
+        self.label = label
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchResponseGrantCheck: Codable, Sendable, Equatable {
+    public var status: String
+    public var detail: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status = "status"
+        case detail = "detail"
+    }
+
+    public init(status: String, detail: String? = nil) {
+        self.status = status
+        self.detail = detail
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchResponse: Codable, Sendable, Equatable {
+    public var provider: String
+    /// Your org id: the externalId of the `referalli` partner link in Cookie Munch.
+    public var externalId: String
+    public var receiverUrl: String
+    public var sites: [String]
+    public var stampCheck: GetOrgConsentPartnersCookiemunchResponseStampCheck
+    /// Per registered site: whether its owner granted Referalli that site in Cookie Munch (GET /v1/partner/links).
+    public var grants: [GetOrgConsentPartnersCookiemunchResponseGrantsItem]
+    public var grantCheck: GetOrgConsentPartnersCookiemunchResponseGrantCheck
+
+    enum CodingKeys: String, CodingKey {
+        case provider = "provider"
+        case externalId = "externalId"
+        case receiverUrl = "receiverUrl"
+        case sites = "sites"
+        case stampCheck = "stampCheck"
+        case grants = "grants"
+        case grantCheck = "grantCheck"
+    }
+
+    public init(provider: String, externalId: String, receiverUrl: String, sites: [String], stampCheck: GetOrgConsentPartnersCookiemunchResponseStampCheck, grants: [GetOrgConsentPartnersCookiemunchResponseGrantsItem], grantCheck: GetOrgConsentPartnersCookiemunchResponseGrantCheck) {
+        self.provider = provider
+        self.externalId = externalId
+        self.receiverUrl = receiverUrl
+        self.sites = sites
+        self.stampCheck = stampCheck
+        self.grants = grants
+        self.grantCheck = grantCheck
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchEventsResponseDataItem: Codable, Sendable, Equatable {
+    public var id: String
+    /// Cookie Munch's event id (`evt_…`).
+    public var eventId: String
+    public var type: String
+    public var cbid: String
+    /// The visitor's consent-receipt id.
+    public var stamp: String?
+    public var choices: [String: Bool]
+    public var withdrawn: [String]
+    public var region: String?
+    /// The Cookie Munch key that signed the delivery.
+    public var keyId: String
+    public var occurredAt: String
+    public var receivedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case eventId = "eventId"
+        case type = "type"
+        case cbid = "cbid"
+        case stamp = "stamp"
+        case choices = "choices"
+        case withdrawn = "withdrawn"
+        case region = "region"
+        case keyId = "keyId"
+        case occurredAt = "occurredAt"
+        case receivedAt = "receivedAt"
+    }
+
+    public init(id: String, eventId: String, type: String, cbid: String, stamp: String? = nil, choices: [String: Bool], withdrawn: [String], region: String? = nil, keyId: String, occurredAt: String, receivedAt: String) {
+        self.id = id
+        self.eventId = eventId
+        self.type = type
+        self.cbid = cbid
+        self.stamp = stamp
+        self.choices = choices
+        self.withdrawn = withdrawn
+        self.region = region
+        self.keyId = keyId
+        self.occurredAt = occurredAt
+        self.receivedAt = receivedAt
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchEventsResponseStampCheck: Codable, Sendable, Equatable {
+    /// `live`: stamps are checked with Cookie Munch; `not_configured`: no partner token, stamps are kept as received.
+    public var status: String
+    public var detail: String
+
+    enum CodingKeys: String, CodingKey {
+        case status = "status"
+        case detail = "detail"
+    }
+
+    public init(status: String, detail: String) {
+        self.status = status
+        self.detail = detail
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchEventsResponseChecksItem: Codable, Sendable, Equatable {
+    public var cbid: String
+    /// `consented` only when Cookie Munch found the stamp with `referrals` on.
+    public var verdict: String
+    public var categories: [String: Bool]
+    public var withdrawn: [String]
+    public var withdrawnAt: String?
+    public var decidedAt: String?
+    public var detail: String?
+    public var checkedAt: String
+    public var stamp: String
+    public var credited: Bool
+    public var clickId: String?
+    public var eventId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case cbid = "cbid"
+        case verdict = "verdict"
+        case categories = "categories"
+        case withdrawn = "withdrawn"
+        case withdrawnAt = "withdrawnAt"
+        case decidedAt = "decidedAt"
+        case detail = "detail"
+        case checkedAt = "checkedAt"
+        case stamp = "stamp"
+        case credited = "credited"
+        case clickId = "clickId"
+        case eventId = "eventId"
+    }
+
+    public init(cbid: String, verdict: String, categories: [String: Bool], withdrawn: [String], withdrawnAt: String? = nil, decidedAt: String? = nil, detail: String? = nil, checkedAt: String, stamp: String, credited: Bool, clickId: String? = nil, eventId: String? = nil) {
+        self.cbid = cbid
+        self.verdict = verdict
+        self.categories = categories
+        self.withdrawn = withdrawn
+        self.withdrawnAt = withdrawnAt
+        self.decidedAt = decidedAt
+        self.detail = detail
+        self.checkedAt = checkedAt
+        self.stamp = stamp
+        self.credited = credited
+        self.clickId = clickId
+        self.eventId = eventId
+    }
+}
+
+public struct GetOrgConsentPartnersCookiemunchEventsResponse: Codable, Sendable, Equatable {
+    public var data: [GetOrgConsentPartnersCookiemunchEventsResponseDataItem]
+    public var stampCheck: GetOrgConsentPartnersCookiemunchEventsResponseStampCheck
+    /// With `stamp`: what Cookie Munch said about it, newest first.
+    public var checks: [GetOrgConsentPartnersCookiemunchEventsResponseChecksItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case data = "data"
+        case stampCheck = "stampCheck"
+        case checks = "checks"
+    }
+
+    public init(data: [GetOrgConsentPartnersCookiemunchEventsResponseDataItem], stampCheck: GetOrgConsentPartnersCookiemunchEventsResponseStampCheck, checks: [GetOrgConsentPartnersCookiemunchEventsResponseChecksItem]? = nil) {
+        self.data = data
+        self.stampCheck = stampCheck
+        self.checks = checks
+    }
+}
+
+public struct PostOrgConsentPartnersCookiemunchStampsCheckResponse: Codable, Sendable, Equatable {
+    public var stamp: String
+    public var credited: Bool
+    public var cbid: String
+    /// `consented` only when Cookie Munch found the stamp with `referrals` on.
+    public var verdict: String
+    public var categories: [String: Bool]
+    public var withdrawn: [String]
+    public var withdrawnAt: String?
+    public var decidedAt: String?
+    public var detail: String?
+    public var checkedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case stamp = "stamp"
+        case credited = "credited"
+        case cbid = "cbid"
+        case verdict = "verdict"
+        case categories = "categories"
+        case withdrawn = "withdrawn"
+        case withdrawnAt = "withdrawnAt"
+        case decidedAt = "decidedAt"
+        case detail = "detail"
+        case checkedAt = "checkedAt"
+    }
+
+    public init(stamp: String, credited: Bool, cbid: String, verdict: String, categories: [String: Bool], withdrawn: [String], withdrawnAt: String? = nil, decidedAt: String? = nil, detail: String? = nil, checkedAt: String) {
+        self.stamp = stamp
+        self.credited = credited
+        self.cbid = cbid
+        self.verdict = verdict
+        self.categories = categories
+        self.withdrawn = withdrawn
+        self.withdrawnAt = withdrawnAt
+        self.decidedAt = decidedAt
+        self.detail = detail
+        self.checkedAt = checkedAt
+    }
+}
+
+public struct PostOrgsOrgIdPrivacyExecutorKeyResponse: Codable, Sendable, Equatable {
+    /// The cm-standard-v2 bearer key for `executorUrl`. Shown once.
+    public var secret: String
+    public var executorUrl: String
+    public var contract: String
+    public var orgId: String
+    public var linkId: String
+    public var cbid: String
+    /// An earlier key existed and stopped working.
+    public var rotated: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case secret = "secret"
+        case executorUrl = "executorUrl"
+        case contract = "contract"
+        case orgId = "orgId"
+        case linkId = "linkId"
+        case cbid = "cbid"
+        case rotated = "rotated"
+    }
+
+    public init(secret: String, executorUrl: String, contract: String, orgId: String, linkId: String, cbid: String, rotated: Bool) {
+        self.secret = secret
+        self.executorUrl = executorUrl
+        self.contract = contract
+        self.orgId = orgId
+        self.linkId = linkId
+        self.cbid = cbid
+        self.rotated = rotated
+    }
+}
+
 public struct GetOrgHostedPagesResponseConsent: Codable, Sendable, Equatable {
     public var adapter: String
     public var config: [String: JSONValue]
@@ -16710,6 +17571,3937 @@ public struct PostOrgHostedPagesCheckResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetHostsCurrentChatIdentityResponseTagsItem: Codable, Sendable, Equatable {
+    public var tag: String
+    public var attrs: [String: JSONValue]
+    public var inline: String?
+
+    enum CodingKeys: String, CodingKey {
+        case tag = "tag"
+        case attrs = "attrs"
+        case inline = "inline"
+    }
+
+    public init(tag: String, attrs: [String: JSONValue], inline: String? = nil) {
+        self.tag = tag
+        self.attrs = attrs
+        self.inline = inline
+    }
+}
+
+public struct GetHostsCurrentChatIdentityResponse: Codable, Sendable, Equatable {
+    /// The merchant's chat adapter on this portal domain, or null.
+    public var provider: String?
+    /// Head tags that identify the signed-in partner to that chat (empty when there is nothing to identify).
+    public var tags: [GetHostsCurrentChatIdentityResponseTagsItem]
+
+    enum CodingKeys: String, CodingKey {
+        case provider = "provider"
+        case tags = "tags"
+    }
+
+    public init(provider: String? = nil, tags: [GetHostsCurrentChatIdentityResponseTagsItem]) {
+        self.provider = provider
+        self.tags = tags
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPalette: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPaletteDark: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct GetPortalThemeResponsePublishedFontsFacesItem: Codable, Sendable, Equatable {
+    public var family: String
+    public var src: String
+    public var format: String?
+    public var weight: JSONValue?
+    public var style: String?
+    public var display: String?
+
+    enum CodingKeys: String, CodingKey {
+        case family = "family"
+        case src = "src"
+        case format = "format"
+        case weight = "weight"
+        case style = "style"
+        case display = "display"
+    }
+
+    public init(family: String, src: String, format: String? = nil, weight: JSONValue? = nil, style: String? = nil, display: String? = nil) {
+        self.family = family
+        self.src = src
+        self.format = format
+        self.weight = weight
+        self.style = style
+        self.display = display
+    }
+}
+
+public struct GetPortalThemeResponsePublishedFonts: Codable, Sendable, Equatable {
+    public var faces: [GetPortalThemeResponsePublishedFontsFacesItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case faces = "faces"
+    }
+
+    public init(faces: [GetPortalThemeResponsePublishedFontsFacesItem]? = nil) {
+        self.faces = faces
+    }
+}
+
+public struct GetPortalThemeResponsePublishedTypography: Codable, Sendable, Equatable {
+    public var baseSize: Double?
+    public var headingScale: Double?
+    public var headingWeight: Int?
+    public var bodyWeight: Int?
+    public var headingTransform: String?
+    public var headingTracking: Double?
+    public var bodyLeading: Double?
+    public var numerals: String?
+
+    enum CodingKeys: String, CodingKey {
+        case baseSize = "baseSize"
+        case headingScale = "headingScale"
+        case headingWeight = "headingWeight"
+        case bodyWeight = "bodyWeight"
+        case headingTransform = "headingTransform"
+        case headingTracking = "headingTracking"
+        case bodyLeading = "bodyLeading"
+        case numerals = "numerals"
+    }
+
+    public init(baseSize: Double? = nil, headingScale: Double? = nil, headingWeight: Int? = nil, bodyWeight: Int? = nil, headingTransform: String? = nil, headingTracking: Double? = nil, bodyLeading: Double? = nil, numerals: String? = nil) {
+        self.baseSize = baseSize
+        self.headingScale = headingScale
+        self.headingWeight = headingWeight
+        self.bodyWeight = bodyWeight
+        self.headingTransform = headingTransform
+        self.headingTracking = headingTracking
+        self.bodyLeading = bodyLeading
+        self.numerals = numerals
+    }
+}
+
+public struct GetPortalThemeResponsePublishedComponentsCards: Codable, Sendable, Equatable {
+    public var border: Bool?
+    public var elevation: String?
+
+    enum CodingKeys: String, CodingKey {
+        case border = "border"
+        case elevation = "elevation"
+    }
+
+    public init(border: Bool? = nil, elevation: String? = nil) {
+        self.border = border
+        self.elevation = elevation
+    }
+}
+
+public struct GetPortalThemeResponsePublishedComponentsButtons: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var `case`: String?
+    public var weight: Int?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case `case` = "case"
+        case weight = "weight"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, `case`: String? = nil, weight: Int? = nil, style: String? = nil) {
+        self.radius = radius
+        self.`case` = `case`
+        self.weight = weight
+        self.style = style
+    }
+}
+
+public struct GetPortalThemeResponsePublishedComponentsInputs: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, style: String? = nil) {
+        self.radius = radius
+        self.style = style
+    }
+}
+
+public struct GetPortalThemeResponsePublishedComponentsFocusRing: Codable, Sendable, Equatable {
+    public var color: String?
+    public var width: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case color = "color"
+        case width = "width"
+    }
+
+    public init(color: String? = nil, width: Double? = nil) {
+        self.color = color
+        self.width = width
+    }
+}
+
+public struct GetPortalThemeResponsePublishedComponentsLinks: Codable, Sendable, Equatable {
+    public var underline: String?
+    public var color: String?
+    public var colorDark: String?
+
+    enum CodingKeys: String, CodingKey {
+        case underline = "underline"
+        case color = "color"
+        case colorDark = "colorDark"
+    }
+
+    public init(underline: String? = nil, color: String? = nil, colorDark: String? = nil) {
+        self.underline = underline
+        self.color = color
+        self.colorDark = colorDark
+    }
+}
+
+public struct GetPortalThemeResponsePublishedComponents: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var radiusSmall: Double?
+    public var shadow: String?
+    public var cards: GetPortalThemeResponsePublishedComponentsCards?
+    public var buttons: GetPortalThemeResponsePublishedComponentsButtons?
+    public var inputs: GetPortalThemeResponsePublishedComponentsInputs?
+    public var focusRing: GetPortalThemeResponsePublishedComponentsFocusRing?
+    public var links: GetPortalThemeResponsePublishedComponentsLinks?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case radiusSmall = "radiusSmall"
+        case shadow = "shadow"
+        case cards = "cards"
+        case buttons = "buttons"
+        case inputs = "inputs"
+        case focusRing = "focusRing"
+        case links = "links"
+    }
+
+    public init(radius: Double? = nil, radiusSmall: Double? = nil, shadow: String? = nil, cards: GetPortalThemeResponsePublishedComponentsCards? = nil, buttons: GetPortalThemeResponsePublishedComponentsButtons? = nil, inputs: GetPortalThemeResponsePublishedComponentsInputs? = nil, focusRing: GetPortalThemeResponsePublishedComponentsFocusRing? = nil, links: GetPortalThemeResponsePublishedComponentsLinks? = nil) {
+        self.radius = radius
+        self.radiusSmall = radiusSmall
+        self.shadow = shadow
+        self.cards = cards
+        self.buttons = buttons
+        self.inputs = inputs
+        self.focusRing = focusRing
+        self.links = links
+    }
+}
+
+public struct GetPortalThemeResponsePublishedAnnouncementLink: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponsePublishedAnnouncement: Codable, Sendable, Equatable {
+    public var text: String
+    public var level: String?
+    public var link: GetPortalThemeResponsePublishedAnnouncementLink?
+    public var dismissible: Bool?
+    public var background: String?
+    public var ink: String?
+    public var startsAt: String?
+    public var endsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text = "text"
+        case level = "level"
+        case link = "link"
+        case dismissible = "dismissible"
+        case background = "background"
+        case ink = "ink"
+        case startsAt = "startsAt"
+        case endsAt = "endsAt"
+    }
+
+    public init(text: String, level: String? = nil, link: GetPortalThemeResponsePublishedAnnouncementLink? = nil, dismissible: Bool? = nil, background: String? = nil, ink: String? = nil, startsAt: String? = nil, endsAt: String? = nil) {
+        self.text = text
+        self.level = level
+        self.link = link
+        self.dismissible = dismissible
+        self.background = background
+        self.ink = ink
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeHeaderLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeHeaderCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeHeader: Codable, Sendable, Equatable {
+    public var links: [GetPortalThemeResponsePublishedChromeHeaderLinksItem]?
+    public var cta: GetPortalThemeResponsePublishedChromeHeaderCta?
+    public var sticky: Bool?
+    public var showLocaleSwitcher: Bool?
+    public var showThemeToggle: Bool?
+    public var brandAlign: String?
+    public var border: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case links = "links"
+        case cta = "cta"
+        case sticky = "sticky"
+        case showLocaleSwitcher = "showLocaleSwitcher"
+        case showThemeToggle = "showThemeToggle"
+        case brandAlign = "brandAlign"
+        case border = "border"
+    }
+
+    public init(links: [GetPortalThemeResponsePublishedChromeHeaderLinksItem]? = nil, cta: GetPortalThemeResponsePublishedChromeHeaderCta? = nil, sticky: Bool? = nil, showLocaleSwitcher: Bool? = nil, showThemeToggle: Bool? = nil, brandAlign: String? = nil, border: Bool? = nil) {
+        self.links = links
+        self.cta = cta
+        self.sticky = sticky
+        self.showLocaleSwitcher = showLocaleSwitcher
+        self.showThemeToggle = showThemeToggle
+        self.brandAlign = brandAlign
+        self.border = border
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeFooterColumnsItemLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeFooterColumnsItem: Codable, Sendable, Equatable {
+    public var heading: String
+    public var links: [GetPortalThemeResponsePublishedChromeFooterColumnsItemLinksItem]
+
+    enum CodingKeys: String, CodingKey {
+        case heading = "heading"
+        case links = "links"
+    }
+
+    public init(heading: String, links: [GetPortalThemeResponsePublishedChromeFooterColumnsItemLinksItem]) {
+        self.heading = heading
+        self.links = links
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeFooterSocialItem: Codable, Sendable, Equatable {
+    public var platform: String
+    public var href: String
+
+    enum CodingKeys: String, CodingKey {
+        case platform = "platform"
+        case href = "href"
+    }
+
+    public init(platform: String, href: String) {
+        self.platform = platform
+        self.href = href
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChromeFooter: Codable, Sendable, Equatable {
+    public var columns: [GetPortalThemeResponsePublishedChromeFooterColumnsItem]?
+    public var text: String?
+    public var social: [GetPortalThemeResponsePublishedChromeFooterSocialItem]?
+    public var showPoweredBy: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case columns = "columns"
+        case text = "text"
+        case social = "social"
+        case showPoweredBy = "showPoweredBy"
+    }
+
+    public init(columns: [GetPortalThemeResponsePublishedChromeFooterColumnsItem]? = nil, text: String? = nil, social: [GetPortalThemeResponsePublishedChromeFooterSocialItem]? = nil, showPoweredBy: Bool? = nil) {
+        self.columns = columns
+        self.text = text
+        self.social = social
+        self.showPoweredBy = showPoweredBy
+    }
+}
+
+public struct GetPortalThemeResponsePublishedChrome: Codable, Sendable, Equatable {
+    public var header: GetPortalThemeResponsePublishedChromeHeader?
+    public var footer: GetPortalThemeResponsePublishedChromeFooter?
+
+    enum CodingKeys: String, CodingKey {
+        case header = "header"
+        case footer = "footer"
+    }
+
+    public init(header: GetPortalThemeResponsePublishedChromeHeader? = nil, footer: GetPortalThemeResponsePublishedChromeFooter? = nil) {
+        self.header = header
+        self.footer = footer
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortalSectionsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var enabled: Bool?
+    public var title: String?
+    public var description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case enabled = "enabled"
+        case title = "title"
+        case description = "description"
+    }
+
+    public init(id: String, enabled: Bool? = nil, title: String? = nil, description: String? = nil) {
+        self.id = id
+        self.enabled = enabled
+        self.title = title
+        self.description = description
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortalWelcomeCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortalWelcome: Codable, Sendable, Equatable {
+    public var title: String
+    public var body: String?
+    public var image: String?
+    public var cta: GetPortalThemeResponsePublishedPortalWelcomeCta?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case body = "body"
+        case image = "image"
+        case cta = "cta"
+    }
+
+    public init(title: String, body: String? = nil, image: String? = nil, cta: GetPortalThemeResponsePublishedPortalWelcomeCta? = nil) {
+        self.title = title
+        self.body = body
+        self.image = image
+        self.cta = cta
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortalNavigation: Codable, Sendable, Equatable {
+    public var primary: [String]?
+    public var hidden: [String]?
+    public var labels: [String: String]?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case primary = "primary"
+        case hidden = "hidden"
+        case labels = "labels"
+        case style = "style"
+    }
+
+    public init(primary: [String]? = nil, hidden: [String]? = nil, labels: [String: String]? = nil, style: String? = nil) {
+        self.primary = primary
+        self.hidden = hidden
+        self.labels = labels
+        self.style = style
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortalSignIn: Codable, Sendable, Equatable {
+    public var title: String?
+    public var subtitle: String?
+    public var image: String?
+    public var layout: String?
+    public var footnote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case subtitle = "subtitle"
+        case image = "image"
+        case layout = "layout"
+        case footnote = "footnote"
+    }
+
+    public init(title: String? = nil, subtitle: String? = nil, image: String? = nil, layout: String? = nil, footnote: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.image = image
+        self.layout = layout
+        self.footnote = footnote
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortalMoney: Codable, Sendable, Equatable {
+    public var showCurrencyCode: Bool?
+    public var compact: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case showCurrencyCode = "showCurrencyCode"
+        case compact = "compact"
+    }
+
+    public init(showCurrencyCode: Bool? = nil, compact: Bool? = nil) {
+        self.showCurrencyCode = showCurrencyCode
+        self.compact = compact
+    }
+}
+
+public struct GetPortalThemeResponsePublishedPortal: Codable, Sendable, Equatable {
+    public var sections: [GetPortalThemeResponsePublishedPortalSectionsItem]?
+    public var welcome: GetPortalThemeResponsePublishedPortalWelcome?
+    public var navigation: GetPortalThemeResponsePublishedPortalNavigation?
+    public var signIn: GetPortalThemeResponsePublishedPortalSignIn?
+    public var money: GetPortalThemeResponsePublishedPortalMoney?
+
+    enum CodingKeys: String, CodingKey {
+        case sections = "sections"
+        case welcome = "welcome"
+        case navigation = "navigation"
+        case signIn = "signIn"
+        case money = "money"
+    }
+
+    public init(sections: [GetPortalThemeResponsePublishedPortalSectionsItem]? = nil, welcome: GetPortalThemeResponsePublishedPortalWelcome? = nil, navigation: GetPortalThemeResponsePublishedPortalNavigation? = nil, signIn: GetPortalThemeResponsePublishedPortalSignIn? = nil, money: GetPortalThemeResponsePublishedPortalMoney? = nil) {
+        self.sections = sections
+        self.welcome = welcome
+        self.navigation = navigation
+        self.signIn = signIn
+        self.money = money
+    }
+}
+
+public struct GetPortalThemeResponsePublishedSettingsSchemaItem: Codable, Sendable, Equatable {
+    public var key: String
+    public var type: String
+    public var label: String?
+    public var `default`: JSONValue?
+    public var options: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case key = "key"
+        case type = "type"
+        case label = "label"
+        case `default` = "default"
+        case options = "options"
+    }
+
+    public init(key: String, type: String, label: String? = nil, `default`: JSONValue? = nil, options: [String]? = nil) {
+        self.key = key
+        self.type = type
+        self.label = label
+        self.`default` = `default`
+        self.options = options
+    }
+}
+
+public struct GetPortalThemeResponsePublishedCssSnippetsItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var css: String
+    public var enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case css = "css"
+        case enabled = "enabled"
+    }
+
+    public init(name: String, css: String, enabled: Bool? = nil) {
+        self.name = name
+        self.css = css
+        self.enabled = enabled
+    }
+}
+
+public struct GetPortalThemeResponsePublishedMobile: Codable, Sendable, Equatable {
+    public var fontScale: Double?
+    public var density: String?
+    public var logoUrl: String?
+    public var hideSections: [String]?
+    public var css: String?
+
+    enum CodingKeys: String, CodingKey {
+        case fontScale = "fontScale"
+        case density = "density"
+        case logoUrl = "logoUrl"
+        case hideSections = "hideSections"
+        case css = "css"
+    }
+
+    public init(fontScale: Double? = nil, density: String? = nil, logoUrl: String? = nil, hideSections: [String]? = nil, css: String? = nil) {
+        self.fontScale = fontScale
+        self.density = density
+        self.logoUrl = logoUrl
+        self.hideSections = hideSections
+        self.css = css
+    }
+}
+
+public struct GetPortalThemeResponsePublishedEmbed: Codable, Sendable, Equatable {
+    public var enabled: Bool?
+    public var allowedOrigins: [String]?
+    public var hideChrome: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case allowedOrigins = "allowedOrigins"
+        case hideChrome = "hideChrome"
+    }
+
+    public init(enabled: Bool? = nil, allowedOrigins: [String]? = nil, hideChrome: Bool? = nil) {
+        self.enabled = enabled
+        self.allowedOrigins = allowedOrigins
+        self.hideChrome = hideChrome
+    }
+}
+
+/// What partners see now.
+public struct GetPortalThemeResponsePublished: Codable, Sendable, Equatable {
+    public var primaryColor: String?
+    public var primaryColorDark: String?
+    public var accentColor: String?
+    public var palette: GetPortalThemeResponsePublishedPalette?
+    public var paletteDark: GetPortalThemeResponsePublishedPaletteDark?
+    public var colorScheme: String?
+    public var colorSchemeStrict: Bool?
+    public var contentWidth: String?
+    public var density: String?
+    public var font: String?
+    public var customFontUrl: String?
+    public var customFontFamily: String?
+    public var headingFontFamily: String?
+    public var bodyFontFamily: String?
+    public var moneyFontFamily: String?
+    public var monoFontFamily: String?
+    public var fonts: GetPortalThemeResponsePublishedFonts?
+    public var typography: GetPortalThemeResponsePublishedTypography?
+    public var brandName: JSONValue?
+    public var logoUrl: String?
+    public var logoUrlLight: String?
+    public var logoUrlDark: String?
+    public var logoMark: String?
+    public var logoIncludesName: Bool?
+    public var logoDarkMode: String?
+    public var logoHeight: Double?
+    public var faviconUrl: String?
+    public var pageTitle: String?
+    public var components: GetPortalThemeResponsePublishedComponents?
+    public var announcement: GetPortalThemeResponsePublishedAnnouncement?
+    public var chrome: GetPortalThemeResponsePublishedChrome?
+    public var portal: GetPortalThemeResponsePublishedPortal?
+    public var stringOverrides: [String: [String: String]]?
+    public var settingsSchema: [GetPortalThemeResponsePublishedSettingsSchemaItem]?
+    public var settings: [String: JSONValue]?
+    public var customCss: String?
+    public var cssSnippets: [GetPortalThemeResponsePublishedCssSnippetsItem]?
+    public var mobile: GetPortalThemeResponsePublishedMobile?
+    public var embed: GetPortalThemeResponsePublishedEmbed?
+
+    enum CodingKeys: String, CodingKey {
+        case primaryColor = "primaryColor"
+        case primaryColorDark = "primaryColorDark"
+        case accentColor = "accentColor"
+        case palette = "palette"
+        case paletteDark = "paletteDark"
+        case colorScheme = "colorScheme"
+        case colorSchemeStrict = "colorSchemeStrict"
+        case contentWidth = "contentWidth"
+        case density = "density"
+        case font = "font"
+        case customFontUrl = "customFontUrl"
+        case customFontFamily = "customFontFamily"
+        case headingFontFamily = "headingFontFamily"
+        case bodyFontFamily = "bodyFontFamily"
+        case moneyFontFamily = "moneyFontFamily"
+        case monoFontFamily = "monoFontFamily"
+        case fonts = "fonts"
+        case typography = "typography"
+        case brandName = "brandName"
+        case logoUrl = "logoUrl"
+        case logoUrlLight = "logoUrlLight"
+        case logoUrlDark = "logoUrlDark"
+        case logoMark = "logoMark"
+        case logoIncludesName = "logoIncludesName"
+        case logoDarkMode = "logoDarkMode"
+        case logoHeight = "logoHeight"
+        case faviconUrl = "faviconUrl"
+        case pageTitle = "pageTitle"
+        case components = "components"
+        case announcement = "announcement"
+        case chrome = "chrome"
+        case portal = "portal"
+        case stringOverrides = "stringOverrides"
+        case settingsSchema = "settingsSchema"
+        case settings = "settings"
+        case customCss = "customCss"
+        case cssSnippets = "cssSnippets"
+        case mobile = "mobile"
+        case embed = "embed"
+    }
+
+    public init(primaryColor: String? = nil, primaryColorDark: String? = nil, accentColor: String? = nil, palette: GetPortalThemeResponsePublishedPalette? = nil, paletteDark: GetPortalThemeResponsePublishedPaletteDark? = nil, colorScheme: String? = nil, colorSchemeStrict: Bool? = nil, contentWidth: String? = nil, density: String? = nil, font: String? = nil, customFontUrl: String? = nil, customFontFamily: String? = nil, headingFontFamily: String? = nil, bodyFontFamily: String? = nil, moneyFontFamily: String? = nil, monoFontFamily: String? = nil, fonts: GetPortalThemeResponsePublishedFonts? = nil, typography: GetPortalThemeResponsePublishedTypography? = nil, brandName: JSONValue? = nil, logoUrl: String? = nil, logoUrlLight: String? = nil, logoUrlDark: String? = nil, logoMark: String? = nil, logoIncludesName: Bool? = nil, logoDarkMode: String? = nil, logoHeight: Double? = nil, faviconUrl: String? = nil, pageTitle: String? = nil, components: GetPortalThemeResponsePublishedComponents? = nil, announcement: GetPortalThemeResponsePublishedAnnouncement? = nil, chrome: GetPortalThemeResponsePublishedChrome? = nil, portal: GetPortalThemeResponsePublishedPortal? = nil, stringOverrides: [String: [String: String]]? = nil, settingsSchema: [GetPortalThemeResponsePublishedSettingsSchemaItem]? = nil, settings: [String: JSONValue]? = nil, customCss: String? = nil, cssSnippets: [GetPortalThemeResponsePublishedCssSnippetsItem]? = nil, mobile: GetPortalThemeResponsePublishedMobile? = nil, embed: GetPortalThemeResponsePublishedEmbed? = nil) {
+        self.primaryColor = primaryColor
+        self.primaryColorDark = primaryColorDark
+        self.accentColor = accentColor
+        self.palette = palette
+        self.paletteDark = paletteDark
+        self.colorScheme = colorScheme
+        self.colorSchemeStrict = colorSchemeStrict
+        self.contentWidth = contentWidth
+        self.density = density
+        self.font = font
+        self.customFontUrl = customFontUrl
+        self.customFontFamily = customFontFamily
+        self.headingFontFamily = headingFontFamily
+        self.bodyFontFamily = bodyFontFamily
+        self.moneyFontFamily = moneyFontFamily
+        self.monoFontFamily = monoFontFamily
+        self.fonts = fonts
+        self.typography = typography
+        self.brandName = brandName
+        self.logoUrl = logoUrl
+        self.logoUrlLight = logoUrlLight
+        self.logoUrlDark = logoUrlDark
+        self.logoMark = logoMark
+        self.logoIncludesName = logoIncludesName
+        self.logoDarkMode = logoDarkMode
+        self.logoHeight = logoHeight
+        self.faviconUrl = faviconUrl
+        self.pageTitle = pageTitle
+        self.components = components
+        self.announcement = announcement
+        self.chrome = chrome
+        self.portal = portal
+        self.stringOverrides = stringOverrides
+        self.settingsSchema = settingsSchema
+        self.settings = settings
+        self.customCss = customCss
+        self.cssSnippets = cssSnippets
+        self.mobile = mobile
+        self.embed = embed
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Palette: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PaletteDark: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1FontsFacesItem: Codable, Sendable, Equatable {
+    public var family: String
+    public var src: String
+    public var format: String?
+    public var weight: JSONValue?
+    public var style: String?
+    public var display: String?
+
+    enum CodingKeys: String, CodingKey {
+        case family = "family"
+        case src = "src"
+        case format = "format"
+        case weight = "weight"
+        case style = "style"
+        case display = "display"
+    }
+
+    public init(family: String, src: String, format: String? = nil, weight: JSONValue? = nil, style: String? = nil, display: String? = nil) {
+        self.family = family
+        self.src = src
+        self.format = format
+        self.weight = weight
+        self.style = style
+        self.display = display
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Fonts: Codable, Sendable, Equatable {
+    public var faces: [GetPortalThemeResponseDraftOption1FontsFacesItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case faces = "faces"
+    }
+
+    public init(faces: [GetPortalThemeResponseDraftOption1FontsFacesItem]? = nil) {
+        self.faces = faces
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Typography: Codable, Sendable, Equatable {
+    public var baseSize: Double?
+    public var headingScale: Double?
+    public var headingWeight: Int?
+    public var bodyWeight: Int?
+    public var headingTransform: String?
+    public var headingTracking: Double?
+    public var bodyLeading: Double?
+    public var numerals: String?
+
+    enum CodingKeys: String, CodingKey {
+        case baseSize = "baseSize"
+        case headingScale = "headingScale"
+        case headingWeight = "headingWeight"
+        case bodyWeight = "bodyWeight"
+        case headingTransform = "headingTransform"
+        case headingTracking = "headingTracking"
+        case bodyLeading = "bodyLeading"
+        case numerals = "numerals"
+    }
+
+    public init(baseSize: Double? = nil, headingScale: Double? = nil, headingWeight: Int? = nil, bodyWeight: Int? = nil, headingTransform: String? = nil, headingTracking: Double? = nil, bodyLeading: Double? = nil, numerals: String? = nil) {
+        self.baseSize = baseSize
+        self.headingScale = headingScale
+        self.headingWeight = headingWeight
+        self.bodyWeight = bodyWeight
+        self.headingTransform = headingTransform
+        self.headingTracking = headingTracking
+        self.bodyLeading = bodyLeading
+        self.numerals = numerals
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ComponentsCards: Codable, Sendable, Equatable {
+    public var border: Bool?
+    public var elevation: String?
+
+    enum CodingKeys: String, CodingKey {
+        case border = "border"
+        case elevation = "elevation"
+    }
+
+    public init(border: Bool? = nil, elevation: String? = nil) {
+        self.border = border
+        self.elevation = elevation
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ComponentsButtons: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var `case`: String?
+    public var weight: Int?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case `case` = "case"
+        case weight = "weight"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, `case`: String? = nil, weight: Int? = nil, style: String? = nil) {
+        self.radius = radius
+        self.`case` = `case`
+        self.weight = weight
+        self.style = style
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ComponentsInputs: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, style: String? = nil) {
+        self.radius = radius
+        self.style = style
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ComponentsFocusRing: Codable, Sendable, Equatable {
+    public var color: String?
+    public var width: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case color = "color"
+        case width = "width"
+    }
+
+    public init(color: String? = nil, width: Double? = nil) {
+        self.color = color
+        self.width = width
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ComponentsLinks: Codable, Sendable, Equatable {
+    public var underline: String?
+    public var color: String?
+    public var colorDark: String?
+
+    enum CodingKeys: String, CodingKey {
+        case underline = "underline"
+        case color = "color"
+        case colorDark = "colorDark"
+    }
+
+    public init(underline: String? = nil, color: String? = nil, colorDark: String? = nil) {
+        self.underline = underline
+        self.color = color
+        self.colorDark = colorDark
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Components: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var radiusSmall: Double?
+    public var shadow: String?
+    public var cards: GetPortalThemeResponseDraftOption1ComponentsCards?
+    public var buttons: GetPortalThemeResponseDraftOption1ComponentsButtons?
+    public var inputs: GetPortalThemeResponseDraftOption1ComponentsInputs?
+    public var focusRing: GetPortalThemeResponseDraftOption1ComponentsFocusRing?
+    public var links: GetPortalThemeResponseDraftOption1ComponentsLinks?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case radiusSmall = "radiusSmall"
+        case shadow = "shadow"
+        case cards = "cards"
+        case buttons = "buttons"
+        case inputs = "inputs"
+        case focusRing = "focusRing"
+        case links = "links"
+    }
+
+    public init(radius: Double? = nil, radiusSmall: Double? = nil, shadow: String? = nil, cards: GetPortalThemeResponseDraftOption1ComponentsCards? = nil, buttons: GetPortalThemeResponseDraftOption1ComponentsButtons? = nil, inputs: GetPortalThemeResponseDraftOption1ComponentsInputs? = nil, focusRing: GetPortalThemeResponseDraftOption1ComponentsFocusRing? = nil, links: GetPortalThemeResponseDraftOption1ComponentsLinks? = nil) {
+        self.radius = radius
+        self.radiusSmall = radiusSmall
+        self.shadow = shadow
+        self.cards = cards
+        self.buttons = buttons
+        self.inputs = inputs
+        self.focusRing = focusRing
+        self.links = links
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1AnnouncementLink: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Announcement: Codable, Sendable, Equatable {
+    public var text: String
+    public var level: String?
+    public var link: GetPortalThemeResponseDraftOption1AnnouncementLink?
+    public var dismissible: Bool?
+    public var background: String?
+    public var ink: String?
+    public var startsAt: String?
+    public var endsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text = "text"
+        case level = "level"
+        case link = "link"
+        case dismissible = "dismissible"
+        case background = "background"
+        case ink = "ink"
+        case startsAt = "startsAt"
+        case endsAt = "endsAt"
+    }
+
+    public init(text: String, level: String? = nil, link: GetPortalThemeResponseDraftOption1AnnouncementLink? = nil, dismissible: Bool? = nil, background: String? = nil, ink: String? = nil, startsAt: String? = nil, endsAt: String? = nil) {
+        self.text = text
+        self.level = level
+        self.link = link
+        self.dismissible = dismissible
+        self.background = background
+        self.ink = ink
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeHeaderLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeHeaderCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeHeader: Codable, Sendable, Equatable {
+    public var links: [GetPortalThemeResponseDraftOption1ChromeHeaderLinksItem]?
+    public var cta: GetPortalThemeResponseDraftOption1ChromeHeaderCta?
+    public var sticky: Bool?
+    public var showLocaleSwitcher: Bool?
+    public var showThemeToggle: Bool?
+    public var brandAlign: String?
+    public var border: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case links = "links"
+        case cta = "cta"
+        case sticky = "sticky"
+        case showLocaleSwitcher = "showLocaleSwitcher"
+        case showThemeToggle = "showThemeToggle"
+        case brandAlign = "brandAlign"
+        case border = "border"
+    }
+
+    public init(links: [GetPortalThemeResponseDraftOption1ChromeHeaderLinksItem]? = nil, cta: GetPortalThemeResponseDraftOption1ChromeHeaderCta? = nil, sticky: Bool? = nil, showLocaleSwitcher: Bool? = nil, showThemeToggle: Bool? = nil, brandAlign: String? = nil, border: Bool? = nil) {
+        self.links = links
+        self.cta = cta
+        self.sticky = sticky
+        self.showLocaleSwitcher = showLocaleSwitcher
+        self.showThemeToggle = showThemeToggle
+        self.brandAlign = brandAlign
+        self.border = border
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeFooterColumnsItemLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeFooterColumnsItem: Codable, Sendable, Equatable {
+    public var heading: String
+    public var links: [GetPortalThemeResponseDraftOption1ChromeFooterColumnsItemLinksItem]
+
+    enum CodingKeys: String, CodingKey {
+        case heading = "heading"
+        case links = "links"
+    }
+
+    public init(heading: String, links: [GetPortalThemeResponseDraftOption1ChromeFooterColumnsItemLinksItem]) {
+        self.heading = heading
+        self.links = links
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeFooterSocialItem: Codable, Sendable, Equatable {
+    public var platform: String
+    public var href: String
+
+    enum CodingKeys: String, CodingKey {
+        case platform = "platform"
+        case href = "href"
+    }
+
+    public init(platform: String, href: String) {
+        self.platform = platform
+        self.href = href
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1ChromeFooter: Codable, Sendable, Equatable {
+    public var columns: [GetPortalThemeResponseDraftOption1ChromeFooterColumnsItem]?
+    public var text: String?
+    public var social: [GetPortalThemeResponseDraftOption1ChromeFooterSocialItem]?
+    public var showPoweredBy: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case columns = "columns"
+        case text = "text"
+        case social = "social"
+        case showPoweredBy = "showPoweredBy"
+    }
+
+    public init(columns: [GetPortalThemeResponseDraftOption1ChromeFooterColumnsItem]? = nil, text: String? = nil, social: [GetPortalThemeResponseDraftOption1ChromeFooterSocialItem]? = nil, showPoweredBy: Bool? = nil) {
+        self.columns = columns
+        self.text = text
+        self.social = social
+        self.showPoweredBy = showPoweredBy
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Chrome: Codable, Sendable, Equatable {
+    public var header: GetPortalThemeResponseDraftOption1ChromeHeader?
+    public var footer: GetPortalThemeResponseDraftOption1ChromeFooter?
+
+    enum CodingKeys: String, CodingKey {
+        case header = "header"
+        case footer = "footer"
+    }
+
+    public init(header: GetPortalThemeResponseDraftOption1ChromeHeader? = nil, footer: GetPortalThemeResponseDraftOption1ChromeFooter? = nil) {
+        self.header = header
+        self.footer = footer
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PortalSectionsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var enabled: Bool?
+    public var title: String?
+    public var description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case enabled = "enabled"
+        case title = "title"
+        case description = "description"
+    }
+
+    public init(id: String, enabled: Bool? = nil, title: String? = nil, description: String? = nil) {
+        self.id = id
+        self.enabled = enabled
+        self.title = title
+        self.description = description
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PortalWelcomeCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PortalWelcome: Codable, Sendable, Equatable {
+    public var title: String
+    public var body: String?
+    public var image: String?
+    public var cta: GetPortalThemeResponseDraftOption1PortalWelcomeCta?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case body = "body"
+        case image = "image"
+        case cta = "cta"
+    }
+
+    public init(title: String, body: String? = nil, image: String? = nil, cta: GetPortalThemeResponseDraftOption1PortalWelcomeCta? = nil) {
+        self.title = title
+        self.body = body
+        self.image = image
+        self.cta = cta
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PortalNavigation: Codable, Sendable, Equatable {
+    public var primary: [String]?
+    public var hidden: [String]?
+    public var labels: [String: String]?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case primary = "primary"
+        case hidden = "hidden"
+        case labels = "labels"
+        case style = "style"
+    }
+
+    public init(primary: [String]? = nil, hidden: [String]? = nil, labels: [String: String]? = nil, style: String? = nil) {
+        self.primary = primary
+        self.hidden = hidden
+        self.labels = labels
+        self.style = style
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PortalSignIn: Codable, Sendable, Equatable {
+    public var title: String?
+    public var subtitle: String?
+    public var image: String?
+    public var layout: String?
+    public var footnote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case subtitle = "subtitle"
+        case image = "image"
+        case layout = "layout"
+        case footnote = "footnote"
+    }
+
+    public init(title: String? = nil, subtitle: String? = nil, image: String? = nil, layout: String? = nil, footnote: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.image = image
+        self.layout = layout
+        self.footnote = footnote
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1PortalMoney: Codable, Sendable, Equatable {
+    public var showCurrencyCode: Bool?
+    public var compact: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case showCurrencyCode = "showCurrencyCode"
+        case compact = "compact"
+    }
+
+    public init(showCurrencyCode: Bool? = nil, compact: Bool? = nil) {
+        self.showCurrencyCode = showCurrencyCode
+        self.compact = compact
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Portal: Codable, Sendable, Equatable {
+    public var sections: [GetPortalThemeResponseDraftOption1PortalSectionsItem]?
+    public var welcome: GetPortalThemeResponseDraftOption1PortalWelcome?
+    public var navigation: GetPortalThemeResponseDraftOption1PortalNavigation?
+    public var signIn: GetPortalThemeResponseDraftOption1PortalSignIn?
+    public var money: GetPortalThemeResponseDraftOption1PortalMoney?
+
+    enum CodingKeys: String, CodingKey {
+        case sections = "sections"
+        case welcome = "welcome"
+        case navigation = "navigation"
+        case signIn = "signIn"
+        case money = "money"
+    }
+
+    public init(sections: [GetPortalThemeResponseDraftOption1PortalSectionsItem]? = nil, welcome: GetPortalThemeResponseDraftOption1PortalWelcome? = nil, navigation: GetPortalThemeResponseDraftOption1PortalNavigation? = nil, signIn: GetPortalThemeResponseDraftOption1PortalSignIn? = nil, money: GetPortalThemeResponseDraftOption1PortalMoney? = nil) {
+        self.sections = sections
+        self.welcome = welcome
+        self.navigation = navigation
+        self.signIn = signIn
+        self.money = money
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1SettingsSchemaItem: Codable, Sendable, Equatable {
+    public var key: String
+    public var type: String
+    public var label: String?
+    public var `default`: JSONValue?
+    public var options: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case key = "key"
+        case type = "type"
+        case label = "label"
+        case `default` = "default"
+        case options = "options"
+    }
+
+    public init(key: String, type: String, label: String? = nil, `default`: JSONValue? = nil, options: [String]? = nil) {
+        self.key = key
+        self.type = type
+        self.label = label
+        self.`default` = `default`
+        self.options = options
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1CssSnippetsItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var css: String
+    public var enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case css = "css"
+        case enabled = "enabled"
+    }
+
+    public init(name: String, css: String, enabled: Bool? = nil) {
+        self.name = name
+        self.css = css
+        self.enabled = enabled
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Mobile: Codable, Sendable, Equatable {
+    public var fontScale: Double?
+    public var density: String?
+    public var logoUrl: String?
+    public var hideSections: [String]?
+    public var css: String?
+
+    enum CodingKeys: String, CodingKey {
+        case fontScale = "fontScale"
+        case density = "density"
+        case logoUrl = "logoUrl"
+        case hideSections = "hideSections"
+        case css = "css"
+    }
+
+    public init(fontScale: Double? = nil, density: String? = nil, logoUrl: String? = nil, hideSections: [String]? = nil, css: String? = nil) {
+        self.fontScale = fontScale
+        self.density = density
+        self.logoUrl = logoUrl
+        self.hideSections = hideSections
+        self.css = css
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1Embed: Codable, Sendable, Equatable {
+    public var enabled: Bool?
+    public var allowedOrigins: [String]?
+    public var hideChrome: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case allowedOrigins = "allowedOrigins"
+        case hideChrome = "hideChrome"
+    }
+
+    public init(enabled: Bool? = nil, allowedOrigins: [String]? = nil, hideChrome: Bool? = nil) {
+        self.enabled = enabled
+        self.allowedOrigins = allowedOrigins
+        self.hideChrome = hideChrome
+    }
+}
+
+public struct GetPortalThemeResponseDraftOption1: Codable, Sendable, Equatable {
+    public var primaryColor: String?
+    public var primaryColorDark: String?
+    public var accentColor: String?
+    public var palette: GetPortalThemeResponseDraftOption1Palette?
+    public var paletteDark: GetPortalThemeResponseDraftOption1PaletteDark?
+    public var colorScheme: String?
+    public var colorSchemeStrict: Bool?
+    public var contentWidth: String?
+    public var density: String?
+    public var font: String?
+    public var customFontUrl: String?
+    public var customFontFamily: String?
+    public var headingFontFamily: String?
+    public var bodyFontFamily: String?
+    public var moneyFontFamily: String?
+    public var monoFontFamily: String?
+    public var fonts: GetPortalThemeResponseDraftOption1Fonts?
+    public var typography: GetPortalThemeResponseDraftOption1Typography?
+    public var brandName: JSONValue?
+    public var logoUrl: String?
+    public var logoUrlLight: String?
+    public var logoUrlDark: String?
+    public var logoMark: String?
+    public var logoIncludesName: Bool?
+    public var logoDarkMode: String?
+    public var logoHeight: Double?
+    public var faviconUrl: String?
+    public var pageTitle: String?
+    public var components: GetPortalThemeResponseDraftOption1Components?
+    public var announcement: GetPortalThemeResponseDraftOption1Announcement?
+    public var chrome: GetPortalThemeResponseDraftOption1Chrome?
+    public var portal: GetPortalThemeResponseDraftOption1Portal?
+    public var stringOverrides: [String: [String: String]]?
+    public var settingsSchema: [GetPortalThemeResponseDraftOption1SettingsSchemaItem]?
+    public var settings: [String: JSONValue]?
+    public var customCss: String?
+    public var cssSnippets: [GetPortalThemeResponseDraftOption1CssSnippetsItem]?
+    public var mobile: GetPortalThemeResponseDraftOption1Mobile?
+    public var embed: GetPortalThemeResponseDraftOption1Embed?
+
+    enum CodingKeys: String, CodingKey {
+        case primaryColor = "primaryColor"
+        case primaryColorDark = "primaryColorDark"
+        case accentColor = "accentColor"
+        case palette = "palette"
+        case paletteDark = "paletteDark"
+        case colorScheme = "colorScheme"
+        case colorSchemeStrict = "colorSchemeStrict"
+        case contentWidth = "contentWidth"
+        case density = "density"
+        case font = "font"
+        case customFontUrl = "customFontUrl"
+        case customFontFamily = "customFontFamily"
+        case headingFontFamily = "headingFontFamily"
+        case bodyFontFamily = "bodyFontFamily"
+        case moneyFontFamily = "moneyFontFamily"
+        case monoFontFamily = "monoFontFamily"
+        case fonts = "fonts"
+        case typography = "typography"
+        case brandName = "brandName"
+        case logoUrl = "logoUrl"
+        case logoUrlLight = "logoUrlLight"
+        case logoUrlDark = "logoUrlDark"
+        case logoMark = "logoMark"
+        case logoIncludesName = "logoIncludesName"
+        case logoDarkMode = "logoDarkMode"
+        case logoHeight = "logoHeight"
+        case faviconUrl = "faviconUrl"
+        case pageTitle = "pageTitle"
+        case components = "components"
+        case announcement = "announcement"
+        case chrome = "chrome"
+        case portal = "portal"
+        case stringOverrides = "stringOverrides"
+        case settingsSchema = "settingsSchema"
+        case settings = "settings"
+        case customCss = "customCss"
+        case cssSnippets = "cssSnippets"
+        case mobile = "mobile"
+        case embed = "embed"
+    }
+
+    public init(primaryColor: String? = nil, primaryColorDark: String? = nil, accentColor: String? = nil, palette: GetPortalThemeResponseDraftOption1Palette? = nil, paletteDark: GetPortalThemeResponseDraftOption1PaletteDark? = nil, colorScheme: String? = nil, colorSchemeStrict: Bool? = nil, contentWidth: String? = nil, density: String? = nil, font: String? = nil, customFontUrl: String? = nil, customFontFamily: String? = nil, headingFontFamily: String? = nil, bodyFontFamily: String? = nil, moneyFontFamily: String? = nil, monoFontFamily: String? = nil, fonts: GetPortalThemeResponseDraftOption1Fonts? = nil, typography: GetPortalThemeResponseDraftOption1Typography? = nil, brandName: JSONValue? = nil, logoUrl: String? = nil, logoUrlLight: String? = nil, logoUrlDark: String? = nil, logoMark: String? = nil, logoIncludesName: Bool? = nil, logoDarkMode: String? = nil, logoHeight: Double? = nil, faviconUrl: String? = nil, pageTitle: String? = nil, components: GetPortalThemeResponseDraftOption1Components? = nil, announcement: GetPortalThemeResponseDraftOption1Announcement? = nil, chrome: GetPortalThemeResponseDraftOption1Chrome? = nil, portal: GetPortalThemeResponseDraftOption1Portal? = nil, stringOverrides: [String: [String: String]]? = nil, settingsSchema: [GetPortalThemeResponseDraftOption1SettingsSchemaItem]? = nil, settings: [String: JSONValue]? = nil, customCss: String? = nil, cssSnippets: [GetPortalThemeResponseDraftOption1CssSnippetsItem]? = nil, mobile: GetPortalThemeResponseDraftOption1Mobile? = nil, embed: GetPortalThemeResponseDraftOption1Embed? = nil) {
+        self.primaryColor = primaryColor
+        self.primaryColorDark = primaryColorDark
+        self.accentColor = accentColor
+        self.palette = palette
+        self.paletteDark = paletteDark
+        self.colorScheme = colorScheme
+        self.colorSchemeStrict = colorSchemeStrict
+        self.contentWidth = contentWidth
+        self.density = density
+        self.font = font
+        self.customFontUrl = customFontUrl
+        self.customFontFamily = customFontFamily
+        self.headingFontFamily = headingFontFamily
+        self.bodyFontFamily = bodyFontFamily
+        self.moneyFontFamily = moneyFontFamily
+        self.monoFontFamily = monoFontFamily
+        self.fonts = fonts
+        self.typography = typography
+        self.brandName = brandName
+        self.logoUrl = logoUrl
+        self.logoUrlLight = logoUrlLight
+        self.logoUrlDark = logoUrlDark
+        self.logoMark = logoMark
+        self.logoIncludesName = logoIncludesName
+        self.logoDarkMode = logoDarkMode
+        self.logoHeight = logoHeight
+        self.faviconUrl = faviconUrl
+        self.pageTitle = pageTitle
+        self.components = components
+        self.announcement = announcement
+        self.chrome = chrome
+        self.portal = portal
+        self.stringOverrides = stringOverrides
+        self.settingsSchema = settingsSchema
+        self.settings = settings
+        self.customCss = customCss
+        self.cssSnippets = cssSnippets
+        self.mobile = mobile
+        self.embed = embed
+    }
+}
+
+public struct GetPortalThemeResponse: Codable, Sendable, Equatable {
+    /// What partners see now.
+    public var published: GetPortalThemeResponsePublished
+    /// The theme being edited, or null.
+    public var draft: GetPortalThemeResponseDraftOption1?
+    public var hasDraft: Bool
+    public var publishedAt: String?
+    public var updatedAt: String?
+    public var previewExpiresAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case published = "published"
+        case draft = "draft"
+        case hasDraft = "hasDraft"
+        case publishedAt = "publishedAt"
+        case updatedAt = "updatedAt"
+        case previewExpiresAt = "previewExpiresAt"
+    }
+
+    public init(published: GetPortalThemeResponsePublished, draft: GetPortalThemeResponseDraftOption1? = nil, hasDraft: Bool, publishedAt: String? = nil, updatedAt: String? = nil, previewExpiresAt: String? = nil) {
+        self.published = published
+        self.draft = draft
+        self.hasDraft = hasDraft
+        self.publishedAt = publishedAt
+        self.updatedAt = updatedAt
+        self.previewExpiresAt = previewExpiresAt
+    }
+}
+
+/// The theme as JSON Schema (draft 2020-12), for editors and validators.
+public typealias GetPortalThemeSchemaResponse = [String: JSONValue]
+
+public struct GetPortalThemeCompiledResponse: Codable, Sendable, Equatable {
+    public var css: String
+    public var view: [String: JSONValue]
+
+    enum CodingKeys: String, CodingKey {
+        case css = "css"
+        case view = "view"
+    }
+
+    public init(css: String, view: [String: JSONValue]) {
+        self.css = css
+        self.view = view
+    }
+}
+
+public struct GetPortalThemeVersionsResponseDataItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var publishedBy: String?
+    public var note: String?
+    public var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case publishedBy = "publishedBy"
+        case note = "note"
+        case createdAt = "createdAt"
+    }
+
+    public init(id: String, publishedBy: String? = nil, note: String? = nil, createdAt: String) {
+        self.id = id
+        self.publishedBy = publishedBy
+        self.note = note
+        self.createdAt = createdAt
+    }
+}
+
+public struct GetPortalThemeVersionsResponse: Codable, Sendable, Equatable {
+    public var data: [GetPortalThemeVersionsResponseDataItem]
+
+    enum CodingKeys: String, CodingKey {
+        case data = "data"
+    }
+
+    public init(data: [GetPortalThemeVersionsResponseDataItem]) {
+        self.data = data
+    }
+}
+
+public struct PostPortalThemePreviewResponse: Codable, Sendable, Equatable {
+    public var token: String
+    public var expiresAt: String
+    /// The preview on your verified portal domain, or null without one.
+    public var url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case token = "token"
+        case expiresAt = "expiresAt"
+        case url = "url"
+    }
+
+    public init(token: String, expiresAt: String, url: String? = nil) {
+        self.token = token
+        self.expiresAt = expiresAt
+        self.url = url
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPalette: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPaletteDark: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedFontsFacesItem: Codable, Sendable, Equatable {
+    public var family: String
+    public var src: String
+    public var format: String?
+    public var weight: JSONValue?
+    public var style: String?
+    public var display: String?
+
+    enum CodingKeys: String, CodingKey {
+        case family = "family"
+        case src = "src"
+        case format = "format"
+        case weight = "weight"
+        case style = "style"
+        case display = "display"
+    }
+
+    public init(family: String, src: String, format: String? = nil, weight: JSONValue? = nil, style: String? = nil, display: String? = nil) {
+        self.family = family
+        self.src = src
+        self.format = format
+        self.weight = weight
+        self.style = style
+        self.display = display
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedFonts: Codable, Sendable, Equatable {
+    public var faces: [PostPortalThemeImportBrandResponsePublishedFontsFacesItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case faces = "faces"
+    }
+
+    public init(faces: [PostPortalThemeImportBrandResponsePublishedFontsFacesItem]? = nil) {
+        self.faces = faces
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedTypography: Codable, Sendable, Equatable {
+    public var baseSize: Double?
+    public var headingScale: Double?
+    public var headingWeight: Int?
+    public var bodyWeight: Int?
+    public var headingTransform: String?
+    public var headingTracking: Double?
+    public var bodyLeading: Double?
+    public var numerals: String?
+
+    enum CodingKeys: String, CodingKey {
+        case baseSize = "baseSize"
+        case headingScale = "headingScale"
+        case headingWeight = "headingWeight"
+        case bodyWeight = "bodyWeight"
+        case headingTransform = "headingTransform"
+        case headingTracking = "headingTracking"
+        case bodyLeading = "bodyLeading"
+        case numerals = "numerals"
+    }
+
+    public init(baseSize: Double? = nil, headingScale: Double? = nil, headingWeight: Int? = nil, bodyWeight: Int? = nil, headingTransform: String? = nil, headingTracking: Double? = nil, bodyLeading: Double? = nil, numerals: String? = nil) {
+        self.baseSize = baseSize
+        self.headingScale = headingScale
+        self.headingWeight = headingWeight
+        self.bodyWeight = bodyWeight
+        self.headingTransform = headingTransform
+        self.headingTracking = headingTracking
+        self.bodyLeading = bodyLeading
+        self.numerals = numerals
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedComponentsCards: Codable, Sendable, Equatable {
+    public var border: Bool?
+    public var elevation: String?
+
+    enum CodingKeys: String, CodingKey {
+        case border = "border"
+        case elevation = "elevation"
+    }
+
+    public init(border: Bool? = nil, elevation: String? = nil) {
+        self.border = border
+        self.elevation = elevation
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedComponentsButtons: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var `case`: String?
+    public var weight: Int?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case `case` = "case"
+        case weight = "weight"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, `case`: String? = nil, weight: Int? = nil, style: String? = nil) {
+        self.radius = radius
+        self.`case` = `case`
+        self.weight = weight
+        self.style = style
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedComponentsInputs: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, style: String? = nil) {
+        self.radius = radius
+        self.style = style
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedComponentsFocusRing: Codable, Sendable, Equatable {
+    public var color: String?
+    public var width: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case color = "color"
+        case width = "width"
+    }
+
+    public init(color: String? = nil, width: Double? = nil) {
+        self.color = color
+        self.width = width
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedComponentsLinks: Codable, Sendable, Equatable {
+    public var underline: String?
+    public var color: String?
+    public var colorDark: String?
+
+    enum CodingKeys: String, CodingKey {
+        case underline = "underline"
+        case color = "color"
+        case colorDark = "colorDark"
+    }
+
+    public init(underline: String? = nil, color: String? = nil, colorDark: String? = nil) {
+        self.underline = underline
+        self.color = color
+        self.colorDark = colorDark
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedComponents: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var radiusSmall: Double?
+    public var shadow: String?
+    public var cards: PostPortalThemeImportBrandResponsePublishedComponentsCards?
+    public var buttons: PostPortalThemeImportBrandResponsePublishedComponentsButtons?
+    public var inputs: PostPortalThemeImportBrandResponsePublishedComponentsInputs?
+    public var focusRing: PostPortalThemeImportBrandResponsePublishedComponentsFocusRing?
+    public var links: PostPortalThemeImportBrandResponsePublishedComponentsLinks?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case radiusSmall = "radiusSmall"
+        case shadow = "shadow"
+        case cards = "cards"
+        case buttons = "buttons"
+        case inputs = "inputs"
+        case focusRing = "focusRing"
+        case links = "links"
+    }
+
+    public init(radius: Double? = nil, radiusSmall: Double? = nil, shadow: String? = nil, cards: PostPortalThemeImportBrandResponsePublishedComponentsCards? = nil, buttons: PostPortalThemeImportBrandResponsePublishedComponentsButtons? = nil, inputs: PostPortalThemeImportBrandResponsePublishedComponentsInputs? = nil, focusRing: PostPortalThemeImportBrandResponsePublishedComponentsFocusRing? = nil, links: PostPortalThemeImportBrandResponsePublishedComponentsLinks? = nil) {
+        self.radius = radius
+        self.radiusSmall = radiusSmall
+        self.shadow = shadow
+        self.cards = cards
+        self.buttons = buttons
+        self.inputs = inputs
+        self.focusRing = focusRing
+        self.links = links
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedAnnouncementLink: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedAnnouncement: Codable, Sendable, Equatable {
+    public var text: String
+    public var level: String?
+    public var link: PostPortalThemeImportBrandResponsePublishedAnnouncementLink?
+    public var dismissible: Bool?
+    public var background: String?
+    public var ink: String?
+    public var startsAt: String?
+    public var endsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text = "text"
+        case level = "level"
+        case link = "link"
+        case dismissible = "dismissible"
+        case background = "background"
+        case ink = "ink"
+        case startsAt = "startsAt"
+        case endsAt = "endsAt"
+    }
+
+    public init(text: String, level: String? = nil, link: PostPortalThemeImportBrandResponsePublishedAnnouncementLink? = nil, dismissible: Bool? = nil, background: String? = nil, ink: String? = nil, startsAt: String? = nil, endsAt: String? = nil) {
+        self.text = text
+        self.level = level
+        self.link = link
+        self.dismissible = dismissible
+        self.background = background
+        self.ink = ink
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeHeaderLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeHeaderCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeHeader: Codable, Sendable, Equatable {
+    public var links: [PostPortalThemeImportBrandResponsePublishedChromeHeaderLinksItem]?
+    public var cta: PostPortalThemeImportBrandResponsePublishedChromeHeaderCta?
+    public var sticky: Bool?
+    public var showLocaleSwitcher: Bool?
+    public var showThemeToggle: Bool?
+    public var brandAlign: String?
+    public var border: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case links = "links"
+        case cta = "cta"
+        case sticky = "sticky"
+        case showLocaleSwitcher = "showLocaleSwitcher"
+        case showThemeToggle = "showThemeToggle"
+        case brandAlign = "brandAlign"
+        case border = "border"
+    }
+
+    public init(links: [PostPortalThemeImportBrandResponsePublishedChromeHeaderLinksItem]? = nil, cta: PostPortalThemeImportBrandResponsePublishedChromeHeaderCta? = nil, sticky: Bool? = nil, showLocaleSwitcher: Bool? = nil, showThemeToggle: Bool? = nil, brandAlign: String? = nil, border: Bool? = nil) {
+        self.links = links
+        self.cta = cta
+        self.sticky = sticky
+        self.showLocaleSwitcher = showLocaleSwitcher
+        self.showThemeToggle = showThemeToggle
+        self.brandAlign = brandAlign
+        self.border = border
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeFooterColumnsItemLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeFooterColumnsItem: Codable, Sendable, Equatable {
+    public var heading: String
+    public var links: [PostPortalThemeImportBrandResponsePublishedChromeFooterColumnsItemLinksItem]
+
+    enum CodingKeys: String, CodingKey {
+        case heading = "heading"
+        case links = "links"
+    }
+
+    public init(heading: String, links: [PostPortalThemeImportBrandResponsePublishedChromeFooterColumnsItemLinksItem]) {
+        self.heading = heading
+        self.links = links
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeFooterSocialItem: Codable, Sendable, Equatable {
+    public var platform: String
+    public var href: String
+
+    enum CodingKeys: String, CodingKey {
+        case platform = "platform"
+        case href = "href"
+    }
+
+    public init(platform: String, href: String) {
+        self.platform = platform
+        self.href = href
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChromeFooter: Codable, Sendable, Equatable {
+    public var columns: [PostPortalThemeImportBrandResponsePublishedChromeFooterColumnsItem]?
+    public var text: String?
+    public var social: [PostPortalThemeImportBrandResponsePublishedChromeFooterSocialItem]?
+    public var showPoweredBy: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case columns = "columns"
+        case text = "text"
+        case social = "social"
+        case showPoweredBy = "showPoweredBy"
+    }
+
+    public init(columns: [PostPortalThemeImportBrandResponsePublishedChromeFooterColumnsItem]? = nil, text: String? = nil, social: [PostPortalThemeImportBrandResponsePublishedChromeFooterSocialItem]? = nil, showPoweredBy: Bool? = nil) {
+        self.columns = columns
+        self.text = text
+        self.social = social
+        self.showPoweredBy = showPoweredBy
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedChrome: Codable, Sendable, Equatable {
+    public var header: PostPortalThemeImportBrandResponsePublishedChromeHeader?
+    public var footer: PostPortalThemeImportBrandResponsePublishedChromeFooter?
+
+    enum CodingKeys: String, CodingKey {
+        case header = "header"
+        case footer = "footer"
+    }
+
+    public init(header: PostPortalThemeImportBrandResponsePublishedChromeHeader? = nil, footer: PostPortalThemeImportBrandResponsePublishedChromeFooter? = nil) {
+        self.header = header
+        self.footer = footer
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortalSectionsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var enabled: Bool?
+    public var title: String?
+    public var description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case enabled = "enabled"
+        case title = "title"
+        case description = "description"
+    }
+
+    public init(id: String, enabled: Bool? = nil, title: String? = nil, description: String? = nil) {
+        self.id = id
+        self.enabled = enabled
+        self.title = title
+        self.description = description
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortalWelcomeCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortalWelcome: Codable, Sendable, Equatable {
+    public var title: String
+    public var body: String?
+    public var image: String?
+    public var cta: PostPortalThemeImportBrandResponsePublishedPortalWelcomeCta?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case body = "body"
+        case image = "image"
+        case cta = "cta"
+    }
+
+    public init(title: String, body: String? = nil, image: String? = nil, cta: PostPortalThemeImportBrandResponsePublishedPortalWelcomeCta? = nil) {
+        self.title = title
+        self.body = body
+        self.image = image
+        self.cta = cta
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortalNavigation: Codable, Sendable, Equatable {
+    public var primary: [String]?
+    public var hidden: [String]?
+    public var labels: [String: String]?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case primary = "primary"
+        case hidden = "hidden"
+        case labels = "labels"
+        case style = "style"
+    }
+
+    public init(primary: [String]? = nil, hidden: [String]? = nil, labels: [String: String]? = nil, style: String? = nil) {
+        self.primary = primary
+        self.hidden = hidden
+        self.labels = labels
+        self.style = style
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortalSignIn: Codable, Sendable, Equatable {
+    public var title: String?
+    public var subtitle: String?
+    public var image: String?
+    public var layout: String?
+    public var footnote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case subtitle = "subtitle"
+        case image = "image"
+        case layout = "layout"
+        case footnote = "footnote"
+    }
+
+    public init(title: String? = nil, subtitle: String? = nil, image: String? = nil, layout: String? = nil, footnote: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.image = image
+        self.layout = layout
+        self.footnote = footnote
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortalMoney: Codable, Sendable, Equatable {
+    public var showCurrencyCode: Bool?
+    public var compact: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case showCurrencyCode = "showCurrencyCode"
+        case compact = "compact"
+    }
+
+    public init(showCurrencyCode: Bool? = nil, compact: Bool? = nil) {
+        self.showCurrencyCode = showCurrencyCode
+        self.compact = compact
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedPortal: Codable, Sendable, Equatable {
+    public var sections: [PostPortalThemeImportBrandResponsePublishedPortalSectionsItem]?
+    public var welcome: PostPortalThemeImportBrandResponsePublishedPortalWelcome?
+    public var navigation: PostPortalThemeImportBrandResponsePublishedPortalNavigation?
+    public var signIn: PostPortalThemeImportBrandResponsePublishedPortalSignIn?
+    public var money: PostPortalThemeImportBrandResponsePublishedPortalMoney?
+
+    enum CodingKeys: String, CodingKey {
+        case sections = "sections"
+        case welcome = "welcome"
+        case navigation = "navigation"
+        case signIn = "signIn"
+        case money = "money"
+    }
+
+    public init(sections: [PostPortalThemeImportBrandResponsePublishedPortalSectionsItem]? = nil, welcome: PostPortalThemeImportBrandResponsePublishedPortalWelcome? = nil, navigation: PostPortalThemeImportBrandResponsePublishedPortalNavigation? = nil, signIn: PostPortalThemeImportBrandResponsePublishedPortalSignIn? = nil, money: PostPortalThemeImportBrandResponsePublishedPortalMoney? = nil) {
+        self.sections = sections
+        self.welcome = welcome
+        self.navigation = navigation
+        self.signIn = signIn
+        self.money = money
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedSettingsSchemaItem: Codable, Sendable, Equatable {
+    public var key: String
+    public var type: String
+    public var label: String?
+    public var `default`: JSONValue?
+    public var options: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case key = "key"
+        case type = "type"
+        case label = "label"
+        case `default` = "default"
+        case options = "options"
+    }
+
+    public init(key: String, type: String, label: String? = nil, `default`: JSONValue? = nil, options: [String]? = nil) {
+        self.key = key
+        self.type = type
+        self.label = label
+        self.`default` = `default`
+        self.options = options
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedCssSnippetsItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var css: String
+    public var enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case css = "css"
+        case enabled = "enabled"
+    }
+
+    public init(name: String, css: String, enabled: Bool? = nil) {
+        self.name = name
+        self.css = css
+        self.enabled = enabled
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedMobile: Codable, Sendable, Equatable {
+    public var fontScale: Double?
+    public var density: String?
+    public var logoUrl: String?
+    public var hideSections: [String]?
+    public var css: String?
+
+    enum CodingKeys: String, CodingKey {
+        case fontScale = "fontScale"
+        case density = "density"
+        case logoUrl = "logoUrl"
+        case hideSections = "hideSections"
+        case css = "css"
+    }
+
+    public init(fontScale: Double? = nil, density: String? = nil, logoUrl: String? = nil, hideSections: [String]? = nil, css: String? = nil) {
+        self.fontScale = fontScale
+        self.density = density
+        self.logoUrl = logoUrl
+        self.hideSections = hideSections
+        self.css = css
+    }
+}
+
+public struct PostPortalThemeImportBrandResponsePublishedEmbed: Codable, Sendable, Equatable {
+    public var enabled: Bool?
+    public var allowedOrigins: [String]?
+    public var hideChrome: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case allowedOrigins = "allowedOrigins"
+        case hideChrome = "hideChrome"
+    }
+
+    public init(enabled: Bool? = nil, allowedOrigins: [String]? = nil, hideChrome: Bool? = nil) {
+        self.enabled = enabled
+        self.allowedOrigins = allowedOrigins
+        self.hideChrome = hideChrome
+    }
+}
+
+/// What partners see now.
+public struct PostPortalThemeImportBrandResponsePublished: Codable, Sendable, Equatable {
+    public var primaryColor: String?
+    public var primaryColorDark: String?
+    public var accentColor: String?
+    public var palette: PostPortalThemeImportBrandResponsePublishedPalette?
+    public var paletteDark: PostPortalThemeImportBrandResponsePublishedPaletteDark?
+    public var colorScheme: String?
+    public var colorSchemeStrict: Bool?
+    public var contentWidth: String?
+    public var density: String?
+    public var font: String?
+    public var customFontUrl: String?
+    public var customFontFamily: String?
+    public var headingFontFamily: String?
+    public var bodyFontFamily: String?
+    public var moneyFontFamily: String?
+    public var monoFontFamily: String?
+    public var fonts: PostPortalThemeImportBrandResponsePublishedFonts?
+    public var typography: PostPortalThemeImportBrandResponsePublishedTypography?
+    public var brandName: JSONValue?
+    public var logoUrl: String?
+    public var logoUrlLight: String?
+    public var logoUrlDark: String?
+    public var logoMark: String?
+    public var logoIncludesName: Bool?
+    public var logoDarkMode: String?
+    public var logoHeight: Double?
+    public var faviconUrl: String?
+    public var pageTitle: String?
+    public var components: PostPortalThemeImportBrandResponsePublishedComponents?
+    public var announcement: PostPortalThemeImportBrandResponsePublishedAnnouncement?
+    public var chrome: PostPortalThemeImportBrandResponsePublishedChrome?
+    public var portal: PostPortalThemeImportBrandResponsePublishedPortal?
+    public var stringOverrides: [String: [String: String]]?
+    public var settingsSchema: [PostPortalThemeImportBrandResponsePublishedSettingsSchemaItem]?
+    public var settings: [String: JSONValue]?
+    public var customCss: String?
+    public var cssSnippets: [PostPortalThemeImportBrandResponsePublishedCssSnippetsItem]?
+    public var mobile: PostPortalThemeImportBrandResponsePublishedMobile?
+    public var embed: PostPortalThemeImportBrandResponsePublishedEmbed?
+
+    enum CodingKeys: String, CodingKey {
+        case primaryColor = "primaryColor"
+        case primaryColorDark = "primaryColorDark"
+        case accentColor = "accentColor"
+        case palette = "palette"
+        case paletteDark = "paletteDark"
+        case colorScheme = "colorScheme"
+        case colorSchemeStrict = "colorSchemeStrict"
+        case contentWidth = "contentWidth"
+        case density = "density"
+        case font = "font"
+        case customFontUrl = "customFontUrl"
+        case customFontFamily = "customFontFamily"
+        case headingFontFamily = "headingFontFamily"
+        case bodyFontFamily = "bodyFontFamily"
+        case moneyFontFamily = "moneyFontFamily"
+        case monoFontFamily = "monoFontFamily"
+        case fonts = "fonts"
+        case typography = "typography"
+        case brandName = "brandName"
+        case logoUrl = "logoUrl"
+        case logoUrlLight = "logoUrlLight"
+        case logoUrlDark = "logoUrlDark"
+        case logoMark = "logoMark"
+        case logoIncludesName = "logoIncludesName"
+        case logoDarkMode = "logoDarkMode"
+        case logoHeight = "logoHeight"
+        case faviconUrl = "faviconUrl"
+        case pageTitle = "pageTitle"
+        case components = "components"
+        case announcement = "announcement"
+        case chrome = "chrome"
+        case portal = "portal"
+        case stringOverrides = "stringOverrides"
+        case settingsSchema = "settingsSchema"
+        case settings = "settings"
+        case customCss = "customCss"
+        case cssSnippets = "cssSnippets"
+        case mobile = "mobile"
+        case embed = "embed"
+    }
+
+    public init(primaryColor: String? = nil, primaryColorDark: String? = nil, accentColor: String? = nil, palette: PostPortalThemeImportBrandResponsePublishedPalette? = nil, paletteDark: PostPortalThemeImportBrandResponsePublishedPaletteDark? = nil, colorScheme: String? = nil, colorSchemeStrict: Bool? = nil, contentWidth: String? = nil, density: String? = nil, font: String? = nil, customFontUrl: String? = nil, customFontFamily: String? = nil, headingFontFamily: String? = nil, bodyFontFamily: String? = nil, moneyFontFamily: String? = nil, monoFontFamily: String? = nil, fonts: PostPortalThemeImportBrandResponsePublishedFonts? = nil, typography: PostPortalThemeImportBrandResponsePublishedTypography? = nil, brandName: JSONValue? = nil, logoUrl: String? = nil, logoUrlLight: String? = nil, logoUrlDark: String? = nil, logoMark: String? = nil, logoIncludesName: Bool? = nil, logoDarkMode: String? = nil, logoHeight: Double? = nil, faviconUrl: String? = nil, pageTitle: String? = nil, components: PostPortalThemeImportBrandResponsePublishedComponents? = nil, announcement: PostPortalThemeImportBrandResponsePublishedAnnouncement? = nil, chrome: PostPortalThemeImportBrandResponsePublishedChrome? = nil, portal: PostPortalThemeImportBrandResponsePublishedPortal? = nil, stringOverrides: [String: [String: String]]? = nil, settingsSchema: [PostPortalThemeImportBrandResponsePublishedSettingsSchemaItem]? = nil, settings: [String: JSONValue]? = nil, customCss: String? = nil, cssSnippets: [PostPortalThemeImportBrandResponsePublishedCssSnippetsItem]? = nil, mobile: PostPortalThemeImportBrandResponsePublishedMobile? = nil, embed: PostPortalThemeImportBrandResponsePublishedEmbed? = nil) {
+        self.primaryColor = primaryColor
+        self.primaryColorDark = primaryColorDark
+        self.accentColor = accentColor
+        self.palette = palette
+        self.paletteDark = paletteDark
+        self.colorScheme = colorScheme
+        self.colorSchemeStrict = colorSchemeStrict
+        self.contentWidth = contentWidth
+        self.density = density
+        self.font = font
+        self.customFontUrl = customFontUrl
+        self.customFontFamily = customFontFamily
+        self.headingFontFamily = headingFontFamily
+        self.bodyFontFamily = bodyFontFamily
+        self.moneyFontFamily = moneyFontFamily
+        self.monoFontFamily = monoFontFamily
+        self.fonts = fonts
+        self.typography = typography
+        self.brandName = brandName
+        self.logoUrl = logoUrl
+        self.logoUrlLight = logoUrlLight
+        self.logoUrlDark = logoUrlDark
+        self.logoMark = logoMark
+        self.logoIncludesName = logoIncludesName
+        self.logoDarkMode = logoDarkMode
+        self.logoHeight = logoHeight
+        self.faviconUrl = faviconUrl
+        self.pageTitle = pageTitle
+        self.components = components
+        self.announcement = announcement
+        self.chrome = chrome
+        self.portal = portal
+        self.stringOverrides = stringOverrides
+        self.settingsSchema = settingsSchema
+        self.settings = settings
+        self.customCss = customCss
+        self.cssSnippets = cssSnippets
+        self.mobile = mobile
+        self.embed = embed
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Palette: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PaletteDark: Codable, Sendable, Equatable {
+    public var background: String?
+    public var surface: String?
+    public var surfaceAlt: String?
+    public var ink: String?
+    public var muted: String?
+    public var faint: String?
+    public var line: String?
+    public var lineStrong: String?
+    public var primary: String?
+    public var onPrimary: String?
+    public var primarySoft: String?
+    public var headerBackground: String?
+    public var headerPrimary: String?
+    public var sidebar: String?
+    public var footerBackground: String?
+    public var footerPrimary: String?
+    public var success: String?
+    public var warning: String?
+    public var danger: String?
+    public var info: String?
+    public var chart: String?
+    public var money: String?
+
+    enum CodingKeys: String, CodingKey {
+        case background = "background"
+        case surface = "surface"
+        case surfaceAlt = "surfaceAlt"
+        case ink = "ink"
+        case muted = "muted"
+        case faint = "faint"
+        case line = "line"
+        case lineStrong = "lineStrong"
+        case primary = "primary"
+        case onPrimary = "onPrimary"
+        case primarySoft = "primarySoft"
+        case headerBackground = "header_background"
+        case headerPrimary = "header_primary"
+        case sidebar = "sidebar"
+        case footerBackground = "footer_background"
+        case footerPrimary = "footer_primary"
+        case success = "success"
+        case warning = "warning"
+        case danger = "danger"
+        case info = "info"
+        case chart = "chart"
+        case money = "money"
+    }
+
+    public init(background: String? = nil, surface: String? = nil, surfaceAlt: String? = nil, ink: String? = nil, muted: String? = nil, faint: String? = nil, line: String? = nil, lineStrong: String? = nil, primary: String? = nil, onPrimary: String? = nil, primarySoft: String? = nil, headerBackground: String? = nil, headerPrimary: String? = nil, sidebar: String? = nil, footerBackground: String? = nil, footerPrimary: String? = nil, success: String? = nil, warning: String? = nil, danger: String? = nil, info: String? = nil, chart: String? = nil, money: String? = nil) {
+        self.background = background
+        self.surface = surface
+        self.surfaceAlt = surfaceAlt
+        self.ink = ink
+        self.muted = muted
+        self.faint = faint
+        self.line = line
+        self.lineStrong = lineStrong
+        self.primary = primary
+        self.onPrimary = onPrimary
+        self.primarySoft = primarySoft
+        self.headerBackground = headerBackground
+        self.headerPrimary = headerPrimary
+        self.sidebar = sidebar
+        self.footerBackground = footerBackground
+        self.footerPrimary = footerPrimary
+        self.success = success
+        self.warning = warning
+        self.danger = danger
+        self.info = info
+        self.chart = chart
+        self.money = money
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1FontsFacesItem: Codable, Sendable, Equatable {
+    public var family: String
+    public var src: String
+    public var format: String?
+    public var weight: JSONValue?
+    public var style: String?
+    public var display: String?
+
+    enum CodingKeys: String, CodingKey {
+        case family = "family"
+        case src = "src"
+        case format = "format"
+        case weight = "weight"
+        case style = "style"
+        case display = "display"
+    }
+
+    public init(family: String, src: String, format: String? = nil, weight: JSONValue? = nil, style: String? = nil, display: String? = nil) {
+        self.family = family
+        self.src = src
+        self.format = format
+        self.weight = weight
+        self.style = style
+        self.display = display
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Fonts: Codable, Sendable, Equatable {
+    public var faces: [PostPortalThemeImportBrandResponseDraftOption1FontsFacesItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case faces = "faces"
+    }
+
+    public init(faces: [PostPortalThemeImportBrandResponseDraftOption1FontsFacesItem]? = nil) {
+        self.faces = faces
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Typography: Codable, Sendable, Equatable {
+    public var baseSize: Double?
+    public var headingScale: Double?
+    public var headingWeight: Int?
+    public var bodyWeight: Int?
+    public var headingTransform: String?
+    public var headingTracking: Double?
+    public var bodyLeading: Double?
+    public var numerals: String?
+
+    enum CodingKeys: String, CodingKey {
+        case baseSize = "baseSize"
+        case headingScale = "headingScale"
+        case headingWeight = "headingWeight"
+        case bodyWeight = "bodyWeight"
+        case headingTransform = "headingTransform"
+        case headingTracking = "headingTracking"
+        case bodyLeading = "bodyLeading"
+        case numerals = "numerals"
+    }
+
+    public init(baseSize: Double? = nil, headingScale: Double? = nil, headingWeight: Int? = nil, bodyWeight: Int? = nil, headingTransform: String? = nil, headingTracking: Double? = nil, bodyLeading: Double? = nil, numerals: String? = nil) {
+        self.baseSize = baseSize
+        self.headingScale = headingScale
+        self.headingWeight = headingWeight
+        self.bodyWeight = bodyWeight
+        self.headingTransform = headingTransform
+        self.headingTracking = headingTracking
+        self.bodyLeading = bodyLeading
+        self.numerals = numerals
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ComponentsCards: Codable, Sendable, Equatable {
+    public var border: Bool?
+    public var elevation: String?
+
+    enum CodingKeys: String, CodingKey {
+        case border = "border"
+        case elevation = "elevation"
+    }
+
+    public init(border: Bool? = nil, elevation: String? = nil) {
+        self.border = border
+        self.elevation = elevation
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ComponentsButtons: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var `case`: String?
+    public var weight: Int?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case `case` = "case"
+        case weight = "weight"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, `case`: String? = nil, weight: Int? = nil, style: String? = nil) {
+        self.radius = radius
+        self.`case` = `case`
+        self.weight = weight
+        self.style = style
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ComponentsInputs: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case style = "style"
+    }
+
+    public init(radius: Double? = nil, style: String? = nil) {
+        self.radius = radius
+        self.style = style
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ComponentsFocusRing: Codable, Sendable, Equatable {
+    public var color: String?
+    public var width: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case color = "color"
+        case width = "width"
+    }
+
+    public init(color: String? = nil, width: Double? = nil) {
+        self.color = color
+        self.width = width
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ComponentsLinks: Codable, Sendable, Equatable {
+    public var underline: String?
+    public var color: String?
+    public var colorDark: String?
+
+    enum CodingKeys: String, CodingKey {
+        case underline = "underline"
+        case color = "color"
+        case colorDark = "colorDark"
+    }
+
+    public init(underline: String? = nil, color: String? = nil, colorDark: String? = nil) {
+        self.underline = underline
+        self.color = color
+        self.colorDark = colorDark
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Components: Codable, Sendable, Equatable {
+    public var radius: Double?
+    public var radiusSmall: Double?
+    public var shadow: String?
+    public var cards: PostPortalThemeImportBrandResponseDraftOption1ComponentsCards?
+    public var buttons: PostPortalThemeImportBrandResponseDraftOption1ComponentsButtons?
+    public var inputs: PostPortalThemeImportBrandResponseDraftOption1ComponentsInputs?
+    public var focusRing: PostPortalThemeImportBrandResponseDraftOption1ComponentsFocusRing?
+    public var links: PostPortalThemeImportBrandResponseDraftOption1ComponentsLinks?
+
+    enum CodingKeys: String, CodingKey {
+        case radius = "radius"
+        case radiusSmall = "radiusSmall"
+        case shadow = "shadow"
+        case cards = "cards"
+        case buttons = "buttons"
+        case inputs = "inputs"
+        case focusRing = "focusRing"
+        case links = "links"
+    }
+
+    public init(radius: Double? = nil, radiusSmall: Double? = nil, shadow: String? = nil, cards: PostPortalThemeImportBrandResponseDraftOption1ComponentsCards? = nil, buttons: PostPortalThemeImportBrandResponseDraftOption1ComponentsButtons? = nil, inputs: PostPortalThemeImportBrandResponseDraftOption1ComponentsInputs? = nil, focusRing: PostPortalThemeImportBrandResponseDraftOption1ComponentsFocusRing? = nil, links: PostPortalThemeImportBrandResponseDraftOption1ComponentsLinks? = nil) {
+        self.radius = radius
+        self.radiusSmall = radiusSmall
+        self.shadow = shadow
+        self.cards = cards
+        self.buttons = buttons
+        self.inputs = inputs
+        self.focusRing = focusRing
+        self.links = links
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1AnnouncementLink: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Announcement: Codable, Sendable, Equatable {
+    public var text: String
+    public var level: String?
+    public var link: PostPortalThemeImportBrandResponseDraftOption1AnnouncementLink?
+    public var dismissible: Bool?
+    public var background: String?
+    public var ink: String?
+    public var startsAt: String?
+    public var endsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case text = "text"
+        case level = "level"
+        case link = "link"
+        case dismissible = "dismissible"
+        case background = "background"
+        case ink = "ink"
+        case startsAt = "startsAt"
+        case endsAt = "endsAt"
+    }
+
+    public init(text: String, level: String? = nil, link: PostPortalThemeImportBrandResponseDraftOption1AnnouncementLink? = nil, dismissible: Bool? = nil, background: String? = nil, ink: String? = nil, startsAt: String? = nil, endsAt: String? = nil) {
+        self.text = text
+        self.level = level
+        self.link = link
+        self.dismissible = dismissible
+        self.background = background
+        self.ink = ink
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeHeaderLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeHeaderCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeHeader: Codable, Sendable, Equatable {
+    public var links: [PostPortalThemeImportBrandResponseDraftOption1ChromeHeaderLinksItem]?
+    public var cta: PostPortalThemeImportBrandResponseDraftOption1ChromeHeaderCta?
+    public var sticky: Bool?
+    public var showLocaleSwitcher: Bool?
+    public var showThemeToggle: Bool?
+    public var brandAlign: String?
+    public var border: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case links = "links"
+        case cta = "cta"
+        case sticky = "sticky"
+        case showLocaleSwitcher = "showLocaleSwitcher"
+        case showThemeToggle = "showThemeToggle"
+        case brandAlign = "brandAlign"
+        case border = "border"
+    }
+
+    public init(links: [PostPortalThemeImportBrandResponseDraftOption1ChromeHeaderLinksItem]? = nil, cta: PostPortalThemeImportBrandResponseDraftOption1ChromeHeaderCta? = nil, sticky: Bool? = nil, showLocaleSwitcher: Bool? = nil, showThemeToggle: Bool? = nil, brandAlign: String? = nil, border: Bool? = nil) {
+        self.links = links
+        self.cta = cta
+        self.sticky = sticky
+        self.showLocaleSwitcher = showLocaleSwitcher
+        self.showThemeToggle = showThemeToggle
+        self.brandAlign = brandAlign
+        self.border = border
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeFooterColumnsItemLinksItem: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeFooterColumnsItem: Codable, Sendable, Equatable {
+    public var heading: String
+    public var links: [PostPortalThemeImportBrandResponseDraftOption1ChromeFooterColumnsItemLinksItem]
+
+    enum CodingKeys: String, CodingKey {
+        case heading = "heading"
+        case links = "links"
+    }
+
+    public init(heading: String, links: [PostPortalThemeImportBrandResponseDraftOption1ChromeFooterColumnsItemLinksItem]) {
+        self.heading = heading
+        self.links = links
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeFooterSocialItem: Codable, Sendable, Equatable {
+    public var platform: String
+    public var href: String
+
+    enum CodingKeys: String, CodingKey {
+        case platform = "platform"
+        case href = "href"
+    }
+
+    public init(platform: String, href: String) {
+        self.platform = platform
+        self.href = href
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1ChromeFooter: Codable, Sendable, Equatable {
+    public var columns: [PostPortalThemeImportBrandResponseDraftOption1ChromeFooterColumnsItem]?
+    public var text: String?
+    public var social: [PostPortalThemeImportBrandResponseDraftOption1ChromeFooterSocialItem]?
+    public var showPoweredBy: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case columns = "columns"
+        case text = "text"
+        case social = "social"
+        case showPoweredBy = "showPoweredBy"
+    }
+
+    public init(columns: [PostPortalThemeImportBrandResponseDraftOption1ChromeFooterColumnsItem]? = nil, text: String? = nil, social: [PostPortalThemeImportBrandResponseDraftOption1ChromeFooterSocialItem]? = nil, showPoweredBy: Bool? = nil) {
+        self.columns = columns
+        self.text = text
+        self.social = social
+        self.showPoweredBy = showPoweredBy
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Chrome: Codable, Sendable, Equatable {
+    public var header: PostPortalThemeImportBrandResponseDraftOption1ChromeHeader?
+    public var footer: PostPortalThemeImportBrandResponseDraftOption1ChromeFooter?
+
+    enum CodingKeys: String, CodingKey {
+        case header = "header"
+        case footer = "footer"
+    }
+
+    public init(header: PostPortalThemeImportBrandResponseDraftOption1ChromeHeader? = nil, footer: PostPortalThemeImportBrandResponseDraftOption1ChromeFooter? = nil) {
+        self.header = header
+        self.footer = footer
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PortalSectionsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var enabled: Bool?
+    public var title: String?
+    public var description: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case enabled = "enabled"
+        case title = "title"
+        case description = "description"
+    }
+
+    public init(id: String, enabled: Bool? = nil, title: String? = nil, description: String? = nil) {
+        self.id = id
+        self.enabled = enabled
+        self.title = title
+        self.description = description
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PortalWelcomeCta: Codable, Sendable, Equatable {
+    public var label: String
+    public var href: String
+    public var newTab: Bool?
+    public var translations: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case label = "label"
+        case href = "href"
+        case newTab = "newTab"
+        case translations = "translations"
+    }
+
+    public init(label: String, href: String, newTab: Bool? = nil, translations: [String: String]? = nil) {
+        self.label = label
+        self.href = href
+        self.newTab = newTab
+        self.translations = translations
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PortalWelcome: Codable, Sendable, Equatable {
+    public var title: String
+    public var body: String?
+    public var image: String?
+    public var cta: PostPortalThemeImportBrandResponseDraftOption1PortalWelcomeCta?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case body = "body"
+        case image = "image"
+        case cta = "cta"
+    }
+
+    public init(title: String, body: String? = nil, image: String? = nil, cta: PostPortalThemeImportBrandResponseDraftOption1PortalWelcomeCta? = nil) {
+        self.title = title
+        self.body = body
+        self.image = image
+        self.cta = cta
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PortalNavigation: Codable, Sendable, Equatable {
+    public var primary: [String]?
+    public var hidden: [String]?
+    public var labels: [String: String]?
+    public var style: String?
+
+    enum CodingKeys: String, CodingKey {
+        case primary = "primary"
+        case hidden = "hidden"
+        case labels = "labels"
+        case style = "style"
+    }
+
+    public init(primary: [String]? = nil, hidden: [String]? = nil, labels: [String: String]? = nil, style: String? = nil) {
+        self.primary = primary
+        self.hidden = hidden
+        self.labels = labels
+        self.style = style
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PortalSignIn: Codable, Sendable, Equatable {
+    public var title: String?
+    public var subtitle: String?
+    public var image: String?
+    public var layout: String?
+    public var footnote: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title = "title"
+        case subtitle = "subtitle"
+        case image = "image"
+        case layout = "layout"
+        case footnote = "footnote"
+    }
+
+    public init(title: String? = nil, subtitle: String? = nil, image: String? = nil, layout: String? = nil, footnote: String? = nil) {
+        self.title = title
+        self.subtitle = subtitle
+        self.image = image
+        self.layout = layout
+        self.footnote = footnote
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1PortalMoney: Codable, Sendable, Equatable {
+    public var showCurrencyCode: Bool?
+    public var compact: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case showCurrencyCode = "showCurrencyCode"
+        case compact = "compact"
+    }
+
+    public init(showCurrencyCode: Bool? = nil, compact: Bool? = nil) {
+        self.showCurrencyCode = showCurrencyCode
+        self.compact = compact
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Portal: Codable, Sendable, Equatable {
+    public var sections: [PostPortalThemeImportBrandResponseDraftOption1PortalSectionsItem]?
+    public var welcome: PostPortalThemeImportBrandResponseDraftOption1PortalWelcome?
+    public var navigation: PostPortalThemeImportBrandResponseDraftOption1PortalNavigation?
+    public var signIn: PostPortalThemeImportBrandResponseDraftOption1PortalSignIn?
+    public var money: PostPortalThemeImportBrandResponseDraftOption1PortalMoney?
+
+    enum CodingKeys: String, CodingKey {
+        case sections = "sections"
+        case welcome = "welcome"
+        case navigation = "navigation"
+        case signIn = "signIn"
+        case money = "money"
+    }
+
+    public init(sections: [PostPortalThemeImportBrandResponseDraftOption1PortalSectionsItem]? = nil, welcome: PostPortalThemeImportBrandResponseDraftOption1PortalWelcome? = nil, navigation: PostPortalThemeImportBrandResponseDraftOption1PortalNavigation? = nil, signIn: PostPortalThemeImportBrandResponseDraftOption1PortalSignIn? = nil, money: PostPortalThemeImportBrandResponseDraftOption1PortalMoney? = nil) {
+        self.sections = sections
+        self.welcome = welcome
+        self.navigation = navigation
+        self.signIn = signIn
+        self.money = money
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1SettingsSchemaItem: Codable, Sendable, Equatable {
+    public var key: String
+    public var type: String
+    public var label: String?
+    public var `default`: JSONValue?
+    public var options: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case key = "key"
+        case type = "type"
+        case label = "label"
+        case `default` = "default"
+        case options = "options"
+    }
+
+    public init(key: String, type: String, label: String? = nil, `default`: JSONValue? = nil, options: [String]? = nil) {
+        self.key = key
+        self.type = type
+        self.label = label
+        self.`default` = `default`
+        self.options = options
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1CssSnippetsItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var css: String
+    public var enabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case css = "css"
+        case enabled = "enabled"
+    }
+
+    public init(name: String, css: String, enabled: Bool? = nil) {
+        self.name = name
+        self.css = css
+        self.enabled = enabled
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Mobile: Codable, Sendable, Equatable {
+    public var fontScale: Double?
+    public var density: String?
+    public var logoUrl: String?
+    public var hideSections: [String]?
+    public var css: String?
+
+    enum CodingKeys: String, CodingKey {
+        case fontScale = "fontScale"
+        case density = "density"
+        case logoUrl = "logoUrl"
+        case hideSections = "hideSections"
+        case css = "css"
+    }
+
+    public init(fontScale: Double? = nil, density: String? = nil, logoUrl: String? = nil, hideSections: [String]? = nil, css: String? = nil) {
+        self.fontScale = fontScale
+        self.density = density
+        self.logoUrl = logoUrl
+        self.hideSections = hideSections
+        self.css = css
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1Embed: Codable, Sendable, Equatable {
+    public var enabled: Bool?
+    public var allowedOrigins: [String]?
+    public var hideChrome: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case allowedOrigins = "allowedOrigins"
+        case hideChrome = "hideChrome"
+    }
+
+    public init(enabled: Bool? = nil, allowedOrigins: [String]? = nil, hideChrome: Bool? = nil) {
+        self.enabled = enabled
+        self.allowedOrigins = allowedOrigins
+        self.hideChrome = hideChrome
+    }
+}
+
+public struct PostPortalThemeImportBrandResponseDraftOption1: Codable, Sendable, Equatable {
+    public var primaryColor: String?
+    public var primaryColorDark: String?
+    public var accentColor: String?
+    public var palette: PostPortalThemeImportBrandResponseDraftOption1Palette?
+    public var paletteDark: PostPortalThemeImportBrandResponseDraftOption1PaletteDark?
+    public var colorScheme: String?
+    public var colorSchemeStrict: Bool?
+    public var contentWidth: String?
+    public var density: String?
+    public var font: String?
+    public var customFontUrl: String?
+    public var customFontFamily: String?
+    public var headingFontFamily: String?
+    public var bodyFontFamily: String?
+    public var moneyFontFamily: String?
+    public var monoFontFamily: String?
+    public var fonts: PostPortalThemeImportBrandResponseDraftOption1Fonts?
+    public var typography: PostPortalThemeImportBrandResponseDraftOption1Typography?
+    public var brandName: JSONValue?
+    public var logoUrl: String?
+    public var logoUrlLight: String?
+    public var logoUrlDark: String?
+    public var logoMark: String?
+    public var logoIncludesName: Bool?
+    public var logoDarkMode: String?
+    public var logoHeight: Double?
+    public var faviconUrl: String?
+    public var pageTitle: String?
+    public var components: PostPortalThemeImportBrandResponseDraftOption1Components?
+    public var announcement: PostPortalThemeImportBrandResponseDraftOption1Announcement?
+    public var chrome: PostPortalThemeImportBrandResponseDraftOption1Chrome?
+    public var portal: PostPortalThemeImportBrandResponseDraftOption1Portal?
+    public var stringOverrides: [String: [String: String]]?
+    public var settingsSchema: [PostPortalThemeImportBrandResponseDraftOption1SettingsSchemaItem]?
+    public var settings: [String: JSONValue]?
+    public var customCss: String?
+    public var cssSnippets: [PostPortalThemeImportBrandResponseDraftOption1CssSnippetsItem]?
+    public var mobile: PostPortalThemeImportBrandResponseDraftOption1Mobile?
+    public var embed: PostPortalThemeImportBrandResponseDraftOption1Embed?
+
+    enum CodingKeys: String, CodingKey {
+        case primaryColor = "primaryColor"
+        case primaryColorDark = "primaryColorDark"
+        case accentColor = "accentColor"
+        case palette = "palette"
+        case paletteDark = "paletteDark"
+        case colorScheme = "colorScheme"
+        case colorSchemeStrict = "colorSchemeStrict"
+        case contentWidth = "contentWidth"
+        case density = "density"
+        case font = "font"
+        case customFontUrl = "customFontUrl"
+        case customFontFamily = "customFontFamily"
+        case headingFontFamily = "headingFontFamily"
+        case bodyFontFamily = "bodyFontFamily"
+        case moneyFontFamily = "moneyFontFamily"
+        case monoFontFamily = "monoFontFamily"
+        case fonts = "fonts"
+        case typography = "typography"
+        case brandName = "brandName"
+        case logoUrl = "logoUrl"
+        case logoUrlLight = "logoUrlLight"
+        case logoUrlDark = "logoUrlDark"
+        case logoMark = "logoMark"
+        case logoIncludesName = "logoIncludesName"
+        case logoDarkMode = "logoDarkMode"
+        case logoHeight = "logoHeight"
+        case faviconUrl = "faviconUrl"
+        case pageTitle = "pageTitle"
+        case components = "components"
+        case announcement = "announcement"
+        case chrome = "chrome"
+        case portal = "portal"
+        case stringOverrides = "stringOverrides"
+        case settingsSchema = "settingsSchema"
+        case settings = "settings"
+        case customCss = "customCss"
+        case cssSnippets = "cssSnippets"
+        case mobile = "mobile"
+        case embed = "embed"
+    }
+
+    public init(primaryColor: String? = nil, primaryColorDark: String? = nil, accentColor: String? = nil, palette: PostPortalThemeImportBrandResponseDraftOption1Palette? = nil, paletteDark: PostPortalThemeImportBrandResponseDraftOption1PaletteDark? = nil, colorScheme: String? = nil, colorSchemeStrict: Bool? = nil, contentWidth: String? = nil, density: String? = nil, font: String? = nil, customFontUrl: String? = nil, customFontFamily: String? = nil, headingFontFamily: String? = nil, bodyFontFamily: String? = nil, moneyFontFamily: String? = nil, monoFontFamily: String? = nil, fonts: PostPortalThemeImportBrandResponseDraftOption1Fonts? = nil, typography: PostPortalThemeImportBrandResponseDraftOption1Typography? = nil, brandName: JSONValue? = nil, logoUrl: String? = nil, logoUrlLight: String? = nil, logoUrlDark: String? = nil, logoMark: String? = nil, logoIncludesName: Bool? = nil, logoDarkMode: String? = nil, logoHeight: Double? = nil, faviconUrl: String? = nil, pageTitle: String? = nil, components: PostPortalThemeImportBrandResponseDraftOption1Components? = nil, announcement: PostPortalThemeImportBrandResponseDraftOption1Announcement? = nil, chrome: PostPortalThemeImportBrandResponseDraftOption1Chrome? = nil, portal: PostPortalThemeImportBrandResponseDraftOption1Portal? = nil, stringOverrides: [String: [String: String]]? = nil, settingsSchema: [PostPortalThemeImportBrandResponseDraftOption1SettingsSchemaItem]? = nil, settings: [String: JSONValue]? = nil, customCss: String? = nil, cssSnippets: [PostPortalThemeImportBrandResponseDraftOption1CssSnippetsItem]? = nil, mobile: PostPortalThemeImportBrandResponseDraftOption1Mobile? = nil, embed: PostPortalThemeImportBrandResponseDraftOption1Embed? = nil) {
+        self.primaryColor = primaryColor
+        self.primaryColorDark = primaryColorDark
+        self.accentColor = accentColor
+        self.palette = palette
+        self.paletteDark = paletteDark
+        self.colorScheme = colorScheme
+        self.colorSchemeStrict = colorSchemeStrict
+        self.contentWidth = contentWidth
+        self.density = density
+        self.font = font
+        self.customFontUrl = customFontUrl
+        self.customFontFamily = customFontFamily
+        self.headingFontFamily = headingFontFamily
+        self.bodyFontFamily = bodyFontFamily
+        self.moneyFontFamily = moneyFontFamily
+        self.monoFontFamily = monoFontFamily
+        self.fonts = fonts
+        self.typography = typography
+        self.brandName = brandName
+        self.logoUrl = logoUrl
+        self.logoUrlLight = logoUrlLight
+        self.logoUrlDark = logoUrlDark
+        self.logoMark = logoMark
+        self.logoIncludesName = logoIncludesName
+        self.logoDarkMode = logoDarkMode
+        self.logoHeight = logoHeight
+        self.faviconUrl = faviconUrl
+        self.pageTitle = pageTitle
+        self.components = components
+        self.announcement = announcement
+        self.chrome = chrome
+        self.portal = portal
+        self.stringOverrides = stringOverrides
+        self.settingsSchema = settingsSchema
+        self.settings = settings
+        self.customCss = customCss
+        self.cssSnippets = cssSnippets
+        self.mobile = mobile
+        self.embed = embed
+    }
+}
+
+public struct PostPortalThemeImportBrandResponse: Codable, Sendable, Equatable {
+    /// What partners see now.
+    public var published: PostPortalThemeImportBrandResponsePublished
+    /// The theme being edited, or null.
+    public var draft: PostPortalThemeImportBrandResponseDraftOption1?
+    public var hasDraft: Bool
+    public var publishedAt: String?
+    public var updatedAt: String?
+    public var previewExpiresAt: String?
+    /// The design tokens that mapped onto the theme.
+    public var applied: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case published = "published"
+        case draft = "draft"
+        case hasDraft = "hasDraft"
+        case publishedAt = "publishedAt"
+        case updatedAt = "updatedAt"
+        case previewExpiresAt = "previewExpiresAt"
+        case applied = "applied"
+    }
+
+    public init(published: PostPortalThemeImportBrandResponsePublished, draft: PostPortalThemeImportBrandResponseDraftOption1? = nil, hasDraft: Bool, publishedAt: String? = nil, updatedAt: String? = nil, previewExpiresAt: String? = nil, applied: [String]) {
+        self.published = published
+        self.draft = draft
+        self.hasDraft = hasDraft
+        self.publishedAt = publishedAt
+        self.updatedAt = updatedAt
+        self.previewExpiresAt = previewExpiresAt
+        self.applied = applied
+    }
+}
+
+public struct GetStripeCreditsConnectionResponse: Codable, Sendable, Equatable {
+    public var connected: Bool
+    /// Which stored key the rail uses: its own, or your Stripe payout connection.
+    public var source: String?
+    public var connectedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case connected = "connected"
+        case source = "source"
+        case connectedAt = "connectedAt"
+    }
+
+    public init(connected: Bool, source: String? = nil, connectedAt: String? = nil) {
+        self.connected = connected
+        self.source = source
+        self.connectedAt = connectedAt
+    }
+}
+
+public struct GetProgramsIdStripeCreditsResponse: Codable, Sendable, Equatable {
+    public var programId: String
+    public var enabled: Bool
+    public var referrerMatch: String
+    public var metadataKey: String?
+    public var refereeRewards: Bool
+    public var keyConnected: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case programId = "programId"
+        case enabled = "enabled"
+        case referrerMatch = "referrerMatch"
+        case metadataKey = "metadataKey"
+        case refereeRewards = "refereeRewards"
+        case keyConnected = "keyConnected"
+    }
+
+    public init(programId: String, enabled: Bool, referrerMatch: String, metadataKey: String? = nil, refereeRewards: Bool, keyConnected: Bool) {
+        self.programId = programId
+        self.enabled = enabled
+        self.referrerMatch = referrerMatch
+        self.metadataKey = metadataKey
+        self.refereeRewards = refereeRewards
+        self.keyConnected = keyConnected
+    }
+}
+
+public struct GetProgramsIdStripeCreditsLogResponseDataItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    public var currency: String
+    public var stripeCustomerId: String?
+    public var status: String
+    public var attempts: Int
+    public var stripeBalanceTransactionId: String?
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case stripeCustomerId = "stripeCustomerId"
+        case status = "status"
+        case attempts = "attempts"
+        case stripeBalanceTransactionId = "stripeBalanceTransactionId"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.stripeCustomerId = stripeCustomerId
+        self.status = status
+        self.attempts = attempts
+        self.stripeBalanceTransactionId = stripeBalanceTransactionId
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct GetProgramsIdStripeCreditsLogResponse: Codable, Sendable, Equatable {
+    public var object: String
+    public var data: [GetProgramsIdStripeCreditsLogResponseDataItem]
+    public var hasMore: Bool
+    public var nextCursor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case object = "object"
+        case data = "data"
+        case hasMore = "has_more"
+        case nextCursor = "next_cursor"
+    }
+
+    public init(object: String, data: [GetProgramsIdStripeCreditsLogResponseDataItem], hasMore: Bool, nextCursor: String? = nil) {
+        self.object = object
+        self.data = data
+        self.hasMore = hasMore
+        self.nextCursor = nextCursor
+    }
+}
+
 public struct PostWebhooksBillingConnectionIdResponseResultsItem: Codable, Sendable, Equatable {
     public var duplicate: Bool
     public var billingEventId: String?
@@ -16907,6 +21699,28 @@ public struct PostWebhooksStripeBillingResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostWebhooksCookiemunchConsentResponse: Codable, Sendable, Equatable {
+    public var received: Bool
+    /// This event id was already kept.
+    public var duplicate: Bool?
+    public var ignored: Bool?
+    public var reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case received = "received"
+        case duplicate = "duplicate"
+        case ignored = "ignored"
+        case reason = "reason"
+    }
+
+    public init(received: Bool, duplicate: Bool? = nil, ignored: Bool? = nil, reason: String? = nil) {
+        self.received = received
+        self.duplicate = duplicate
+        self.ignored = ignored
+        self.reason = reason
+    }
+}
+
 public struct PostApiPrivacyLookupResponse: Codable, Sendable, Equatable {
     public var subjectId: String?
     public var status: String
@@ -16922,7 +21736,7 @@ public struct PostApiPrivacyLookupResponse: Codable, Sendable, Equatable {
     }
 }
 
-public struct PostApiPrivacyRequestsResponse: Codable, Sendable, Equatable {
+public struct PostApiPrivacyRequestsResponseValueOption1: Codable, Sendable, Equatable {
     public var id: String
     public var status: String
     public var eta: String?
@@ -16943,29 +21757,86 @@ public struct PostApiPrivacyRequestsResponse: Codable, Sendable, Equatable {
     }
 }
 
-public struct GetApiPrivacyRequestsIdResponse: Codable, Sendable, Equatable {
+public typealias PostApiPrivacyRequestsResponse = JSONValue
+
+public struct GetApiPrivacyRequestsIdResponseValueOption1: Codable, Sendable, Equatable {
     public var id: String
-    public var type: String
     public var status: String
     public var eta: String?
     public var detail: String?
+    public var type: String
+    public var result: GetOpenapiJsonResponse?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case status = "status"
+        case eta = "eta"
+        case detail = "detail"
+        case type = "type"
+        case result = "result"
+    }
+
+    public init(id: String, status: String, eta: String? = nil, detail: String? = nil, type: String, result: GetOpenapiJsonResponse? = nil) {
+        self.id = id
+        self.status = status
+        self.eta = eta
+        self.detail = detail
+        self.type = type
+        self.result = result
+    }
+}
+
+public typealias GetApiPrivacyRequestsIdResponse = JSONValue
+
+public struct PostApiPrivacyRequestsIdCancelResponseRetentionItem: Codable, Sendable, Equatable {
+    public var category: String
+    public var basis: String
+    public var until: String?
+
+    enum CodingKeys: String, CodingKey {
+        case category = "category"
+        case basis = "basis"
+        case until = "until"
+    }
+
+    public init(category: String, basis: String, until: String? = nil) {
+        self.category = category
+        self.basis = basis
+        self.until = until
+    }
+}
+
+public struct PostApiPrivacyRequestsIdCancelResponse: Codable, Sendable, Equatable {
+    public var id: String
+    /// The word the caller used (erasure, export, …).
+    public var type: String
+    public var canonicalType: String
+    public var status: String
+    /// While scheduled: the executeAfter nothing is erased before.
+    public var eta: String?
+    public var detail: String?
+    public var retention: [PostApiPrivacyRequestsIdCancelResponseRetentionItem]?
     public var result: GetOpenapiJsonResponse?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
         case type = "type"
+        case canonicalType = "canonicalType"
         case status = "status"
         case eta = "eta"
         case detail = "detail"
+        case retention = "retention"
         case result = "result"
     }
 
-    public init(id: String, type: String, status: String, eta: String? = nil, detail: String? = nil, result: GetOpenapiJsonResponse? = nil) {
+    public init(id: String, type: String, canonicalType: String, status: String, eta: String? = nil, detail: String? = nil, retention: [PostApiPrivacyRequestsIdCancelResponseRetentionItem]? = nil, result: GetOpenapiJsonResponse? = nil) {
         self.id = id
         self.type = type
+        self.canonicalType = canonicalType
         self.status = status
         self.eta = eta
         self.detail = detail
+        self.retention = retention
         self.result = result
     }
 }
@@ -17008,7 +21879,7 @@ public struct GetApiPrivacyOrgsOrgIdRequestsIdResponse: Codable, Sendable, Equat
     public var type: String
     public var status: String
     public var detail: String?
-    public var result: PostSupportCardsOrgIdAdapterResponse?
+    public var result: GetSupportPlatformChatlyAnswersResponse?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -17018,7 +21889,7 @@ public struct GetApiPrivacyOrgsOrgIdRequestsIdResponse: Codable, Sendable, Equat
         case result = "result"
     }
 
-    public init(id: String, type: String, status: String, detail: String? = nil, result: PostSupportCardsOrgIdAdapterResponse? = nil) {
+    public init(id: String, type: String, status: String, detail: String? = nil, result: GetSupportPlatformChatlyAnswersResponse? = nil) {
         self.id = id
         self.type = type
         self.status = status
@@ -17156,10 +22027,38 @@ public struct PutOrgPortalAuthBodyOption2: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutOrgPortalAuthBodyOption3Claims: Codable, Sendable, Equatable {
+    public var sub: String?
+    public var email: String?
+    public var name: String?
+    public var emailVerified: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sub = "sub"
+        case email = "email"
+        case name = "name"
+        case emailVerified = "emailVerified"
+    }
+
+    public init(sub: String? = nil, email: String? = nil, name: String? = nil, emailVerified: String? = nil) {
+        self.sub = sub
+        self.email = email
+        self.name = name
+        self.emailVerified = emailVerified
+    }
+}
+
 public struct PutOrgPortalAuthBodyOption3: Codable, Sendable, Equatable {
     public var adapter: String
-    public var issuer: String
-    public var jwksUrl: String
+    public var preset: String?
+    public var tenant: String?
+    public var issuer: String?
+    public var jwksUrl: String?
+    public var keyType: String?
+    public var sharedSecret: String?
+    public var audience: String?
+    public var maxAgeS: Int?
+    public var claims: PutOrgPortalAuthBodyOption3Claims?
     public var trustEmailVerified: Bool?
     public var autoEnrollProgramId: String?
     public var name: String?
@@ -17167,22 +22066,66 @@ public struct PutOrgPortalAuthBodyOption3: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case adapter = "adapter"
+        case preset = "preset"
+        case tenant = "tenant"
         case issuer = "issuer"
         case jwksUrl = "jwksUrl"
+        case keyType = "keyType"
+        case sharedSecret = "sharedSecret"
+        case audience = "audience"
+        case maxAgeS = "maxAgeS"
+        case claims = "claims"
         case trustEmailVerified = "trustEmailVerified"
         case autoEnrollProgramId = "autoEnrollProgramId"
         case name = "name"
         case loginUrl = "loginUrl"
     }
 
-    public init(adapter: String, issuer: String, jwksUrl: String, trustEmailVerified: Bool? = nil, autoEnrollProgramId: String? = nil, name: String? = nil, loginUrl: String? = nil) {
+    public init(adapter: String, preset: String? = nil, tenant: String? = nil, issuer: String? = nil, jwksUrl: String? = nil, keyType: String? = nil, sharedSecret: String? = nil, audience: String? = nil, maxAgeS: Int? = nil, claims: PutOrgPortalAuthBodyOption3Claims? = nil, trustEmailVerified: Bool? = nil, autoEnrollProgramId: String? = nil, name: String? = nil, loginUrl: String? = nil) {
         self.adapter = adapter
+        self.preset = preset
+        self.tenant = tenant
         self.issuer = issuer
         self.jwksUrl = jwksUrl
+        self.keyType = keyType
+        self.sharedSecret = sharedSecret
+        self.audience = audience
+        self.maxAgeS = maxAgeS
+        self.claims = claims
         self.trustEmailVerified = trustEmailVerified
         self.autoEnrollProgramId = autoEnrollProgramId
         self.name = name
         self.loginUrl = loginUrl
+    }
+}
+
+public struct PutOrgPortalAuthBodyOption4: Codable, Sendable, Equatable {
+    public var adapter: String
+    public var instanceId: String
+    public var trustEmailVerified: Bool?
+    public var autoEnrollProgramId: String?
+    public var name: String?
+    public var loginUrl: String?
+    public var verifyErrorsSecret: String?
+
+    enum CodingKeys: String, CodingKey {
+        case adapter = "adapter"
+        case instanceId = "instanceId"
+        case trustEmailVerified = "trustEmailVerified"
+        case autoEnrollProgramId = "autoEnrollProgramId"
+        case name = "name"
+        case loginUrl = "loginUrl"
+        case verifyErrorsSecret = "verifyErrorsSecret"
+    }
+
+    public init(adapter: String, instanceId: String, trustEmailVerified: Bool? = nil, autoEnrollProgramId: String? = nil, name: String? = nil, loginUrl: String? = nil, verifyErrorsSecret: String? = nil) {
+        self.adapter = adapter
+        self.instanceId = instanceId
+        self.trustEmailVerified = trustEmailVerified
+        self.autoEnrollProgramId = autoEnrollProgramId
+        self.name = name
+        self.loginUrl = loginUrl
+        self.verifyErrorsSecret = verifyErrorsSecret
     }
 }
 
@@ -17906,6 +22849,156 @@ public struct PatchProgramsIdBodyMobileAppOption1: Codable, Sendable, Equatable 
     }
 }
 
+public struct PatchProgramsIdBodySettingsPublicPage: Codable, Sendable, Equatable {
+    public var pitch: String?
+    public var autoApprove: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case pitch = "pitch"
+        case autoApprove = "autoApprove"
+    }
+
+    public init(pitch: String? = nil, autoApprove: Bool? = nil) {
+        self.pitch = pitch
+        self.autoApprove = autoApprove
+    }
+}
+
+public struct PatchProgramsIdBodySettingsRiskPolicy: Codable, Sendable, Equatable {
+    public var holdBotScore: Double?
+    public var holdRiskScore: Double?
+    public var holdHighRiskLevel: Bool?
+    public var holdDisposableEmail: Bool?
+    public var holdVelocity: Int?
+    public var holdUnverifiedEmail: Bool?
+    public var holdSelfReferral: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case holdBotScore = "holdBotScore"
+        case holdRiskScore = "holdRiskScore"
+        case holdHighRiskLevel = "holdHighRiskLevel"
+        case holdDisposableEmail = "holdDisposableEmail"
+        case holdVelocity = "holdVelocity"
+        case holdUnverifiedEmail = "holdUnverifiedEmail"
+        case holdSelfReferral = "holdSelfReferral"
+    }
+
+    public init(holdBotScore: Double? = nil, holdRiskScore: Double? = nil, holdHighRiskLevel: Bool? = nil, holdDisposableEmail: Bool? = nil, holdVelocity: Int? = nil, holdUnverifiedEmail: Bool? = nil, holdSelfReferral: Bool? = nil) {
+        self.holdBotScore = holdBotScore
+        self.holdRiskScore = holdRiskScore
+        self.holdHighRiskLevel = holdHighRiskLevel
+        self.holdDisposableEmail = holdDisposableEmail
+        self.holdVelocity = holdVelocity
+        self.holdUnverifiedEmail = holdUnverifiedEmail
+        self.holdSelfReferral = holdSelfReferral
+    }
+}
+
+public struct PatchProgramsIdBodySettingsWidget: Codable, Sendable, Equatable {
+    public var autoEnroll: Bool?
+    public var destinationUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case autoEnroll = "autoEnroll"
+        case destinationUrl = "destinationUrl"
+    }
+
+    public init(autoEnroll: Bool? = nil, destinationUrl: String? = nil) {
+        self.autoEnroll = autoEnroll
+        self.destinationUrl = destinationUrl
+    }
+}
+
+public struct PatchProgramsIdBodySettingsMobileAppOption1IosOption1: Codable, Sendable, Equatable {
+    public var teamId: String
+    public var bundleId: String
+
+    enum CodingKeys: String, CodingKey {
+        case teamId = "teamId"
+        case bundleId = "bundleId"
+    }
+
+    public init(teamId: String, bundleId: String) {
+        self.teamId = teamId
+        self.bundleId = bundleId
+    }
+}
+
+public struct PatchProgramsIdBodySettingsMobileAppOption1AndroidOption1: Codable, Sendable, Equatable {
+    public var packageName: String
+    public var sha256CertFingerprints: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case packageName = "packageName"
+        case sha256CertFingerprints = "sha256CertFingerprints"
+    }
+
+    public init(packageName: String, sha256CertFingerprints: [String]) {
+        self.packageName = packageName
+        self.sha256CertFingerprints = sha256CertFingerprints
+    }
+}
+
+public struct PatchProgramsIdBodySettingsMobileAppOption1: Codable, Sendable, Equatable {
+    public var ios: PatchProgramsIdBodySettingsMobileAppOption1IosOption1?
+    public var android: PatchProgramsIdBodySettingsMobileAppOption1AndroidOption1?
+
+    enum CodingKeys: String, CodingKey {
+        case ios = "ios"
+        case android = "android"
+    }
+
+    public init(ios: PatchProgramsIdBodySettingsMobileAppOption1IosOption1? = nil, android: PatchProgramsIdBodySettingsMobileAppOption1AndroidOption1? = nil) {
+        self.ios = ios
+        self.android = android
+    }
+}
+
+public struct PatchProgramsIdBodySettings: Codable, Sendable, Equatable {
+    public var publicHandle: String?
+    public var publicPage: PatchProgramsIdBodySettingsPublicPage?
+    public var probabilisticPolicy: String?
+    public var selfReferralPolicy: String?
+    public var splitCommissions: Bool?
+    public var utmTemplate: [String: String]?
+    public var allowPaidSearch: Bool?
+    public var challengeLinks: Bool?
+    public var settlement: String?
+    public var riskPolicy: PatchProgramsIdBodySettingsRiskPolicy?
+    public var widget: PatchProgramsIdBodySettingsWidget?
+    public var mobileApp: PatchProgramsIdBodySettingsMobileAppOption1?
+
+    enum CodingKeys: String, CodingKey {
+        case publicHandle = "publicHandle"
+        case publicPage = "publicPage"
+        case probabilisticPolicy = "probabilisticPolicy"
+        case selfReferralPolicy = "selfReferralPolicy"
+        case splitCommissions = "splitCommissions"
+        case utmTemplate = "utmTemplate"
+        case allowPaidSearch = "allowPaidSearch"
+        case challengeLinks = "challengeLinks"
+        case settlement = "settlement"
+        case riskPolicy = "riskPolicy"
+        case widget = "widget"
+        case mobileApp = "mobileApp"
+    }
+
+    public init(publicHandle: String? = nil, publicPage: PatchProgramsIdBodySettingsPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, riskPolicy: PatchProgramsIdBodySettingsRiskPolicy? = nil, widget: PatchProgramsIdBodySettingsWidget? = nil, mobileApp: PatchProgramsIdBodySettingsMobileAppOption1? = nil) {
+        self.publicHandle = publicHandle
+        self.publicPage = publicPage
+        self.probabilisticPolicy = probabilisticPolicy
+        self.selfReferralPolicy = selfReferralPolicy
+        self.splitCommissions = splitCommissions
+        self.utmTemplate = utmTemplate
+        self.allowPaidSearch = allowPaidSearch
+        self.challengeLinks = challengeLinks
+        self.settlement = settlement
+        self.riskPolicy = riskPolicy
+        self.widget = widget
+        self.mobileApp = mobileApp
+    }
+}
+
 public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
     public var name: String?
     public var slug: String?
@@ -17926,6 +23019,8 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
     public var riskPolicy: PatchProgramsIdBodyRiskPolicy?
     public var widget: PatchProgramsIdBodyWidget?
     public var mobileApp: PatchProgramsIdBodyMobileAppOption1?
+    public var settings: PatchProgramsIdBodySettings?
+    public var destinationUrl: String?
 
     enum CodingKeys: String, CodingKey {
         case name = "name"
@@ -17947,9 +23042,11 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
         case riskPolicy = "riskPolicy"
         case widget = "widget"
         case mobileApp = "mobileApp"
+        case settings = "settings"
+        case destinationUrl = "destinationUrl"
     }
 
-    public init(name: String? = nil, slug: String? = nil, attributionModel: String? = nil, cookieWindowDays: Int? = nil, signupToConversionDays: Int? = nil, termsMd: String? = nil, status: String? = nil, publicHandle: String? = nil, publicPage: PatchProgramsIdBodyPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, riskPolicy: PatchProgramsIdBodyRiskPolicy? = nil, widget: PatchProgramsIdBodyWidget? = nil, mobileApp: PatchProgramsIdBodyMobileAppOption1? = nil) {
+    public init(name: String? = nil, slug: String? = nil, attributionModel: String? = nil, cookieWindowDays: Int? = nil, signupToConversionDays: Int? = nil, termsMd: String? = nil, status: String? = nil, publicHandle: String? = nil, publicPage: PatchProgramsIdBodyPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, riskPolicy: PatchProgramsIdBodyRiskPolicy? = nil, widget: PatchProgramsIdBodyWidget? = nil, mobileApp: PatchProgramsIdBodyMobileAppOption1? = nil, settings: PatchProgramsIdBodySettings? = nil, destinationUrl: String? = nil) {
         self.name = name
         self.slug = slug
         self.attributionModel = attributionModel
@@ -17969,18 +23066,44 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
         self.riskPolicy = riskPolicy
         self.widget = widget
         self.mobileApp = mobileApp
+        self.settings = settings
+        self.destinationUrl = destinationUrl
+    }
+}
+
+public struct PostProgramsIdReferrersBody: Codable, Sendable, Equatable {
+    public var externalRef: String
+    public var email: String?
+    public var name: String?
+    public var code: String?
+
+    enum CodingKeys: String, CodingKey {
+        case externalRef = "externalRef"
+        case email = "email"
+        case name = "name"
+        case code = "code"
+    }
+
+    public init(externalRef: String, email: String? = nil, name: String? = nil, code: String? = nil) {
+        self.externalRef = externalRef
+        self.email = email
+        self.name = name
+        self.code = code
     }
 }
 
 public struct PostProgramsIdEnrollmentsBody: Codable, Sendable, Equatable {
     public var partnerId: String
+    public var externalRef: String?
 
     enum CodingKeys: String, CodingKey {
         case partnerId = "partnerId"
+        case externalRef = "externalRef"
     }
 
-    public init(partnerId: String) {
+    public init(partnerId: String, externalRef: String? = nil) {
         self.partnerId = partnerId
+        self.externalRef = externalRef
     }
 }
 
@@ -18044,6 +23167,7 @@ public struct PostApiKeysBody: Codable, Sendable, Equatable {
     public var mode: String?
     public var owner: String?
     public var expiresInDays: Int?
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case name = "name"
@@ -18054,9 +23178,10 @@ public struct PostApiKeysBody: Codable, Sendable, Equatable {
         case mode = "mode"
         case owner = "owner"
         case expiresInDays = "expiresInDays"
+        case programIds = "programIds"
     }
 
-    public init(name: String, scopes: [String]? = nil, publishable: Bool? = nil, allowedOrigins: [String]? = nil, apiVersion: String? = nil, mode: String? = nil, owner: String? = nil, expiresInDays: Int? = nil) {
+    public init(name: String, scopes: [String]? = nil, publishable: Bool? = nil, allowedOrigins: [String]? = nil, apiVersion: String? = nil, mode: String? = nil, owner: String? = nil, expiresInDays: Int? = nil, programIds: [String]? = nil) {
         self.name = name
         self.scopes = scopes
         self.publishable = publishable
@@ -18065,6 +23190,7 @@ public struct PostApiKeysBody: Codable, Sendable, Equatable {
         self.mode = mode
         self.owner = owner
         self.expiresInDays = expiresInDays
+        self.programIds = programIds
     }
 }
 
@@ -18072,17 +23198,20 @@ public struct PatchApiKeysIdBody: Codable, Sendable, Equatable {
     public var apiVersion: String?
     public var owner: String?
     public var expiresInDays: Int?
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case apiVersion = "apiVersion"
         case owner = "owner"
         case expiresInDays = "expiresInDays"
+        case programIds = "programIds"
     }
 
-    public init(apiVersion: String? = nil, owner: String? = nil, expiresInDays: Int? = nil) {
+    public init(apiVersion: String? = nil, owner: String? = nil, expiresInDays: Int? = nil, programIds: [String]? = nil) {
         self.apiVersion = apiVersion
         self.owner = owner
         self.expiresInDays = expiresInDays
+        self.programIds = programIds
     }
 }
 
@@ -18820,19 +23949,22 @@ public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
     public var name: String?
     public var webhookSecret: String?
     public var filter: PostBillingConnectionsBodyFilter?
+    public var customerRefMetadataKey: String?
 
     enum CodingKeys: String, CodingKey {
         case provider = "provider"
         case name = "name"
         case webhookSecret = "webhookSecret"
         case filter = "filter"
+        case customerRefMetadataKey = "customerRefMetadataKey"
     }
 
-    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil) {
+    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil, customerRefMetadataKey: String? = nil) {
         self.provider = provider
         self.name = name
         self.webhookSecret = webhookSecret
         self.filter = filter
+        self.customerRefMetadataKey = customerRefMetadataKey
     }
 }
 
@@ -18894,17 +24026,20 @@ public struct PatchBillingConnectionsIdBody: Codable, Sendable, Equatable {
     public var status: String?
     public var name: String?
     public var filter: PatchBillingConnectionsIdBodyFilterOption1?
+    public var customerRefMetadataKey: String?
 
     enum CodingKeys: String, CodingKey {
         case status = "status"
         case name = "name"
         case filter = "filter"
+        case customerRefMetadataKey = "customerRefMetadataKey"
     }
 
-    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil) {
+    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil, customerRefMetadataKey: String? = nil) {
         self.status = status
         self.name = name
         self.filter = filter
+        self.customerRefMetadataKey = customerRefMetadataKey
     }
 }
 
@@ -19545,6 +24680,39 @@ public struct PostPartnerOrgsOrgIdTaxFormBody: Codable, Sendable, Equatable {
     public init(type: String, data: JSONValue) {
         self.type = type
         self.data = data
+    }
+}
+
+public struct PostPartnerApiTokensBody: Codable, Sendable, Equatable {
+    public var name: String
+    public var scopes: [String]?
+    public var expiresInDays: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case scopes = "scopes"
+        case expiresInDays = "expiresInDays"
+    }
+
+    public init(name: String, scopes: [String]? = nil, expiresInDays: Int? = nil) {
+        self.name = name
+        self.scopes = scopes
+        self.expiresInDays = expiresInDays
+    }
+}
+
+public struct PostPartnersIdPortalLinkBody: Codable, Sendable, Equatable {
+    public var programId: String
+    public var returnUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case programId = "programId"
+        case returnUrl = "returnUrl"
+    }
+
+    public init(programId: String, returnUrl: String? = nil) {
+        self.programId = programId
+        self.returnUrl = returnUrl
     }
 }
 
@@ -20970,6 +26138,7 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
     public var provider: String
     public var programId: String
     public var instanceId: String?
+    public var appId: String?
     public var autoEnrollUsers: Bool?
     public var destinationUrl: String?
     public var name: String?
@@ -20980,6 +26149,7 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
         case provider = "provider"
         case programId = "programId"
         case instanceId = "instanceId"
+        case appId = "appId"
         case autoEnrollUsers = "autoEnrollUsers"
         case destinationUrl = "destinationUrl"
         case name = "name"
@@ -20987,10 +26157,11 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
         case keys = "keys"
     }
 
-    public init(provider: String, programId: String, instanceId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, name: String? = nil, secret: String? = nil, keys: PostAuthConnectionsBodyKeys? = nil) {
+    public init(provider: String, programId: String, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, name: String? = nil, secret: String? = nil, keys: PostAuthConnectionsBodyKeys? = nil) {
         self.provider = provider
         self.programId = programId
         self.instanceId = instanceId
+        self.appId = appId
         self.autoEnrollUsers = autoEnrollUsers
         self.destinationUrl = destinationUrl
         self.name = name
@@ -21145,20 +26316,23 @@ public struct PostAuthConnectionsIdSignupsBody: Codable, Sendable, Equatable {
 
 public struct PostAuthConnectionsIdPartnersBody: Codable, Sendable, Equatable {
     public var customerRef: String
-    public var email: String
+    public var email: String?
+    public var emailHash: String?
     public var name: String?
     public var code: String?
 
     enum CodingKeys: String, CodingKey {
         case customerRef = "customerRef"
         case email = "email"
+        case emailHash = "emailHash"
         case name = "name"
         case code = "code"
     }
 
-    public init(customerRef: String, email: String, name: String? = nil, code: String? = nil) {
+    public init(customerRef: String, email: String? = nil, emailHash: String? = nil, name: String? = nil, code: String? = nil) {
         self.customerRef = customerRef
         self.email = email
+        self.emailHash = emailHash
         self.name = name
         self.code = code
     }
@@ -21266,7 +26440,7 @@ public struct PostAuthConnectionsInstallBody: Codable, Sendable, Equatable {
     }
 }
 
-public struct PostOauthTokenBody: Codable, Sendable, Equatable {
+public struct PostOauthTokenBodyOption1: Codable, Sendable, Equatable {
     public var grantType: String
     public var code: String
     public var codeVerifier: String
@@ -21287,6 +26461,80 @@ public struct PostOauthTokenBody: Codable, Sendable, Equatable {
         self.codeVerifier = codeVerifier
         self.clientId = clientId
         self.redirectUri = redirectUri
+    }
+}
+
+public struct PostOauthTokenBodyOption2: Codable, Sendable, Equatable {
+    public var grantType: String
+    public var clientId: String?
+    public var clientSecret: String?
+    public var scope: String?
+
+    enum CodingKeys: String, CodingKey {
+        case grantType = "grant_type"
+        case clientId = "client_id"
+        case clientSecret = "client_secret"
+        case scope = "scope"
+    }
+
+    public init(grantType: String, clientId: String? = nil, clientSecret: String? = nil, scope: String? = nil) {
+        self.grantType = grantType
+        self.clientId = clientId
+        self.clientSecret = clientSecret
+        self.scope = scope
+    }
+}
+
+public struct PostOauthTokenBodyOption3: Codable, Sendable, Equatable {
+    public var grantType: String
+    public var subjectToken: String
+    public var subjectTokenType: String
+    public var requestedTokenType: String?
+    public var audience: String?
+    /// The Referalli org id the token is for.
+    public var resource: String
+    public var scope: String?
+
+    enum CodingKeys: String, CodingKey {
+        case grantType = "grant_type"
+        case subjectToken = "subject_token"
+        case subjectTokenType = "subject_token_type"
+        case requestedTokenType = "requested_token_type"
+        case audience = "audience"
+        case resource = "resource"
+        case scope = "scope"
+    }
+
+    public init(grantType: String, subjectToken: String, subjectTokenType: String, requestedTokenType: String? = nil, audience: String? = nil, resource: String, scope: String? = nil) {
+        self.grantType = grantType
+        self.subjectToken = subjectToken
+        self.subjectTokenType = subjectTokenType
+        self.requestedTokenType = requestedTokenType
+        self.audience = audience
+        self.resource = resource
+        self.scope = scope
+    }
+}
+
+public struct PostProductLinksBody: Codable, Sendable, Equatable {
+    public var partner: String
+    public var name: String?
+    public var scopes: [String]
+    /// Unix ms or ISO 8601, at most a year away. Default one year.
+    public var expiresAt: JSONValue?
+
+    enum CodingKeys: String, CodingKey {
+        case partner = "partner"
+        case name = "name"
+        case scopes = "scopes"
+        case expiresAt = "expires_at"
+    }
+
+    public init(partner: String, name: String? = nil, scopes: [String], expiresAt: JSONValue? = nil) {
+        self.partner = partner
+        self.name = name
+        self.scopes = scopes
+        self.expiresAt = expiresAt
     }
 }
 
@@ -21606,6 +26854,72 @@ public struct PutOrgTrackingConsentBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutOrgConsentPartnersCookiemunchBody: Codable, Sendable, Equatable {
+    /// Every Cookie Munch site (cbid) whose consent events this org accepts. Replaces the list.
+    public var sites: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case sites = "sites"
+    }
+
+    public init(sites: [String]) {
+        self.sites = sites
+    }
+}
+
+public struct PostOrgConsentPartnersCookiemunchStampsCheckBody: Codable, Sendable, Equatable {
+    /// The visitor's Cookie Munch consent stamp (from the CookieMunch cookie, or `aff.consentEvidence().stamp`).
+    public var stamp: String
+    /// The site it was recorded on; default: every registered site in turn.
+    public var cbid: String?
+
+    enum CodingKeys: String, CodingKey {
+        case stamp = "stamp"
+        case cbid = "cbid"
+    }
+
+    public init(stamp: String, cbid: String? = nil) {
+        self.stamp = stamp
+        self.cbid = cbid
+    }
+}
+
+public struct PostOrgsOrgIdPrivacyExecutorKeyBody: Codable, Sendable, Equatable {
+    /// The Cookie Munch site the partner link is on. Without it, any live link to a site this org registered will do.
+    public var cbid: String?
+    /// The partner link it is minted under; checked with Cookie Munch.
+    public var linkId: String?
+    /// Always `referalli`.
+    public var partner: String?
+    /// The Referalli org id the link names; must equal the path.
+    public var externalId: String?
+    /// The Cookie Munch organisation that owns the site.
+    public var orgId: String?
+    /// Never reused; a seen nonce is refused.
+    public var nonce: String?
+    public var iat: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case cbid = "cbid"
+        case linkId = "linkId"
+        case partner = "partner"
+        case externalId = "externalId"
+        case orgId = "orgId"
+        case nonce = "nonce"
+        case iat = "iat"
+    }
+
+    public init(cbid: String? = nil, linkId: String? = nil, partner: String? = nil, externalId: String? = nil, orgId: String? = nil, nonce: String? = nil, iat: Int? = nil) {
+        self.cbid = cbid
+        self.linkId = linkId
+        self.partner = partner
+        self.externalId = externalId
+        self.orgId = orgId
+        self.nonce = nonce
+        self.iat = iat
+    }
+}
+
 public struct PutOrgHostedPagesBodyConsent: Codable, Sendable, Equatable {
     public var adapter: String
     public var config: [String: JSONValue]?
@@ -21624,15 +26938,18 @@ public struct PutOrgHostedPagesBodyConsent: Codable, Sendable, Equatable {
 public struct PutOrgHostedPagesBodyChatOption1: Codable, Sendable, Equatable {
     public var adapter: String
     public var config: [String: JSONValue]?
+    public var identitySecret: String?
 
     enum CodingKeys: String, CodingKey {
         case adapter = "adapter"
         case config = "config"
+        case identitySecret = "identitySecret"
     }
 
-    public init(adapter: String, config: [String: JSONValue]? = nil) {
+    public init(adapter: String, config: [String: JSONValue]? = nil, identitySecret: String? = nil) {
         self.adapter = adapter
         self.config = config
+        self.identitySecret = identitySecret
     }
 }
 
@@ -21651,6 +26968,66 @@ public struct PutOrgHostedPagesBody: Codable, Sendable, Equatable {
         self.consent = consent
         self.chat = chat
         self.customOrigins = customOrigins
+    }
+}
+
+public struct PostPortalThemePublishBody: Codable, Sendable, Equatable {
+    public var note: String?
+
+    enum CodingKeys: String, CodingKey {
+        case note = "note"
+    }
+
+    public init(note: String? = nil) {
+        self.note = note
+    }
+}
+
+public struct PostPortalThemeImportBrandBody: Codable, Sendable, Equatable {
+    public var document: [String: JSONValue]?
+    public var url: String?
+
+    enum CodingKeys: String, CodingKey {
+        case document = "document"
+        case url = "url"
+    }
+
+    public init(document: [String: JSONValue]? = nil, url: String? = nil) {
+        self.document = document
+        self.url = url
+    }
+}
+
+public struct PutStripeCreditsConnectionBody: Codable, Sendable, Equatable {
+    public var secretKey: String
+
+    enum CodingKeys: String, CodingKey {
+        case secretKey = "secretKey"
+    }
+
+    public init(secretKey: String) {
+        self.secretKey = secretKey
+    }
+}
+
+public struct PutProgramsIdStripeCreditsBody: Codable, Sendable, Equatable {
+    public var enabled: Bool
+    public var referrerMatch: String?
+    public var metadataKey: String?
+    public var refereeRewards: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case referrerMatch = "referrerMatch"
+        case metadataKey = "metadataKey"
+        case refereeRewards = "refereeRewards"
+    }
+
+    public init(enabled: Bool, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil) {
+        self.enabled = enabled
+        self.referrerMatch = referrerMatch
+        self.metadataKey = metadataKey
+        self.refereeRewards = refereeRewards
     }
 }
 

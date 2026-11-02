@@ -67,6 +67,10 @@ public enum WebhookTopic {
     public static let roiPatternDetected = "roi.pattern_detected"
     /// `roi.payback_reached`: A credit grant paid back
     public static let roiPaybackReached = "roi.payback_reached"
+    /// `stripe_credit.applied`: A Stripe balance credit or debit was applied
+    public static let stripeCreditApplied = "stripe_credit.applied"
+    /// `stripe_credit.failed`: A Stripe balance credit or debit gave up
+    public static let stripeCreditFailed = "stripe_credit.failed"
     /// `tax.form_delivered`: A tax form was delivered to a partner
     public static let taxFormDelivered = "tax.form_delivered"
     /// `webhook_endpoint.disabled`: A failing webhook endpoint was disabled
@@ -77,7 +81,7 @@ public enum WebhookTopic {
     public static let webhookEndpointRecovered = "webhook_endpoint.recovered"
 
     /// Every topic.
-    public static let all: [String] = ["billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
+    public static let all: [String] = ["billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
 }
 
 /// A webhook event's payload, typed by topic. `.unknown` is a topic this SDK predates.
@@ -144,6 +148,10 @@ public enum WebhookPayload: Sendable {
     case roiPatternDetected(RoiPatternDetectedEventData)
     /// `roi.payback_reached`
     case roiPaybackReached(RoiPaybackReachedEventData)
+    /// `stripe_credit.applied`
+    case stripeCreditApplied(StripeCreditAppliedEventData)
+    /// `stripe_credit.failed`
+    case stripeCreditFailed(StripeCreditFailedEventData)
     /// `tax.form_delivered`
     case taxFormDelivered(TaxFormDeliveredEventData)
     /// `webhook_endpoint.disabled`
@@ -218,6 +226,10 @@ public enum WebhookPayload: Sendable {
             return .roiPatternDetected(try ReferalliClient.decode(RoiPatternDetectedEventData.self, from: data))
         case "roi.payback_reached":
             return .roiPaybackReached(try ReferalliClient.decode(RoiPaybackReachedEventData.self, from: data))
+        case "stripe_credit.applied":
+            return .stripeCreditApplied(try ReferalliClient.decode(StripeCreditAppliedEventData.self, from: data))
+        case "stripe_credit.failed":
+            return .stripeCreditFailed(try ReferalliClient.decode(StripeCreditFailedEventData.self, from: data))
         case "tax.form_delivered":
             return .taxFormDelivered(try ReferalliClient.decode(TaxFormDeliveredEventData.self, from: data))
         case "webhook_endpoint.disabled":

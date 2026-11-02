@@ -36,6 +36,12 @@ public final class SsoRequiredError: APIError, @unchecked Sendable {}
 /// `access_suspended` (HTTP 403).
 public final class AccessSuspendedError: APIError, @unchecked Sendable {}
 
+/// `program_scoped_key` (HTTP 403).
+public final class ProgramScopedKeyError: APIError, @unchecked Sendable {}
+
+/// `restricted_session` (HTTP 403).
+public final class RestrictedSessionError: APIError, @unchecked Sendable {}
+
 /// `not_found` (HTTP 404).
 public final class NotFoundError: APIError, @unchecked Sendable {}
 
@@ -44,6 +50,9 @@ public final class ConflictError: APIError, @unchecked Sendable {}
 
 /// `idempotency_in_progress` (HTTP 409).
 public final class IdempotencyInProgressError: APIError, @unchecked Sendable {}
+
+/// `stripe_key_required` (HTTP 409).
+public final class StripeKeyRequiredError: APIError, @unchecked Sendable {}
 
 /// `replay` (HTTP 409).
 public final class ReplayError: APIError, @unchecked Sendable {}
@@ -97,9 +106,12 @@ extension APIError {
         "webhooks_disabled": WebhooksDisabledError.self,
         "sso_required": SsoRequiredError.self,
         "access_suspended": AccessSuspendedError.self,
+        "program_scoped_key": ProgramScopedKeyError.self,
+        "restricted_session": RestrictedSessionError.self,
         "not_found": NotFoundError.self,
         "conflict": ConflictError.self,
         "idempotency_in_progress": IdempotencyInProgressError.self,
+        "stripe_key_required": StripeKeyRequiredError.self,
         "replay": ReplayError.self,
         "live_mode_only": LiveModeOnlyError.self,
         "test_mode_only": TestModeOnlyError.self,
