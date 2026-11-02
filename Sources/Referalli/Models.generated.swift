@@ -886,6 +886,124 @@ public struct CommissionRule: Codable, Sendable, Equatable {
     }
 }
 
+public struct ProgramTermsBaseOption1: Codable, Sendable, Equatable {
+    public var kind: String
+    /// Basis points: 2000 is 20%.
+    public var percentBps: Int
+
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case percentBps = "percentBps"
+    }
+
+    public init(kind: String, percentBps: Int) {
+        self.kind = kind
+        self.percentBps = percentBps
+    }
+}
+
+public struct ProgramTermsBaseOption2: Codable, Sendable, Equatable {
+    public var kind: String
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+    public var currency: String
+
+    enum CodingKeys: String, CodingKey {
+        case kind = "kind"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+    }
+
+    public init(kind: String, amountMinor: Int, currency: String) {
+        self.kind = kind
+        self.amountMinor = amountMinor
+        self.currency = currency
+    }
+}
+
+public struct ProgramTermsRecurringOption1: Codable, Sendable, Equatable {
+    public var type: String
+
+    enum CodingKeys: String, CodingKey {
+        case type = "type"
+    }
+
+    public init(type: String) {
+        self.type = type
+    }
+}
+
+public struct ProgramTermsRecurringOption2: Codable, Sendable, Equatable {
+    public var type: String
+
+    enum CodingKeys: String, CodingKey {
+        case type = "type"
+    }
+
+    public init(type: String) {
+        self.type = type
+    }
+}
+
+public struct ProgramTermsRecurringOption3: Codable, Sendable, Equatable {
+    public var type: String
+    public var months: Int
+
+    enum CodingKeys: String, CodingKey {
+        case type = "type"
+        case months = "months"
+    }
+
+    public init(type: String, months: Int) {
+        self.type = type
+        self.months = months
+    }
+}
+
+public struct ProgramTermsSummary: Codable, Sendable, Equatable {
+    public var en: String
+
+    enum CodingKeys: String, CodingKey {
+        case en = "en"
+    }
+
+    public init(en: String) {
+        self.en = en
+    }
+}
+
+public struct ProgramTerms: Codable, Sendable, Equatable {
+    public var programId: String
+    /// The commission rule version these terms come from (the latest).
+    public var ruleVersion: Int
+    public var base: JSONValue
+    public var recurring: JSONValue
+    public var holdDays: Int
+    /// Overrides, tiers or new-vs-expansion rates can change the rate a partner earns.
+    public var ratesVary: Bool
+    public var summary: ProgramTermsSummary
+
+    enum CodingKeys: String, CodingKey {
+        case programId = "programId"
+        case ruleVersion = "ruleVersion"
+        case base = "base"
+        case recurring = "recurring"
+        case holdDays = "holdDays"
+        case ratesVary = "ratesVary"
+        case summary = "summary"
+    }
+
+    public init(programId: String, ruleVersion: Int, base: JSONValue, recurring: JSONValue, holdDays: Int, ratesVary: Bool, summary: ProgramTermsSummary) {
+        self.programId = programId
+        self.ruleVersion = ruleVersion
+        self.base = base
+        self.recurring = recurring
+        self.holdDays = holdDays
+        self.ratesVary = ratesVary
+        self.summary = summary
+    }
+}
+
 public struct BillingFilter: Codable, Sendable, Equatable {
     public var metadata: [String: String]?
     public var productIds: [String]?
@@ -1172,8 +1290,10 @@ public struct BillingConnection: Codable, Sendable, Equatable {
     public var id: String
     public var provider: String
     public var name: String
-    /// paused: its webhook URL refuses events until resumed.
+    /// paused: its webhook URL refuses events until resumed. awaiting_secret: a provider that issues its own signing secret (Stripe, Paddle, Polar, Shopify, Recurly, Braintree) was connected without it; its events fail 401 until PUT …/secret stores it.
     public var status: String
+    /// Only referrals in these programs earn from this connection's events; null = every program.
+    public var programIds: [String]?
     public var createdAt: String
     public var webhookUrl: String
     /// The provider sends thin webhooks: set API credentials (Recurly, BigCommerce).
@@ -1185,6 +1305,8 @@ public struct BillingConnection: Codable, Sendable, Equatable {
     public var filter: BillingFilter?
     /// The provider metadata key that holds your customerRef, when it is not referalli_customer_ref.
     public var customerRefMetadataKey: String?
+    /// The Stripe webhook endpoint (`we_…`) Referalli registered for this connection with `stripeKey`.
+    public var stripeWebhookEndpointId: String?
     public var rotation: BillingConnectionRotation
 
     enum CodingKeys: String, CodingKey {
@@ -1192,6 +1314,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case provider = "provider"
         case name = "name"
         case status = "status"
+        case programIds = "programIds"
         case createdAt = "createdAt"
         case webhookUrl = "webhookUrl"
         case needsCredentials = "needsCredentials"
@@ -1199,14 +1322,16 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case valueMapping = "valueMapping"
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
+        case stripeWebhookEndpointId = "stripeWebhookEndpointId"
         case rotation = "rotation"
     }
 
-    public init(id: String, provider: String, name: String, status: String, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, rotation: BillingConnectionRotation) {
+    public init(id: String, provider: String, name: String, status: String, programIds: [String]? = nil, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, stripeWebhookEndpointId: String? = nil, rotation: BillingConnectionRotation) {
         self.id = id
         self.provider = provider
         self.name = name
         self.status = status
+        self.programIds = programIds
         self.createdAt = createdAt
         self.webhookUrl = webhookUrl
         self.needsCredentials = needsCredentials
@@ -1214,6 +1339,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         self.valueMapping = valueMapping
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
+        self.stripeWebhookEndpointId = stripeWebhookEndpointId
         self.rotation = rotation
     }
 }
@@ -1221,6 +1347,8 @@ public struct BillingConnection: Codable, Sendable, Equatable {
 public struct CreatedBillingConnection: Codable, Sendable, Equatable {
     public var id: String
     public var provider: String
+    /// awaiting_secret until PUT …/secret stores the secret a provider issues itself.
+    public var status: String
     /// Returned only here.
     public var webhookSecret: String
     /// Path to register with the provider.
@@ -1228,23 +1356,37 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
     public var filter: BillingFilter?
     /// The provider metadata key that holds your customerRef, when it is not referalli_customer_ref.
     public var customerRefMetadataKey: String?
+    /// Only referrals in these programs earn from this connection's events; null = every program.
+    public var programIds: [String]?
+    /// With `stripeKey`: the Stripe webhook endpoint (`we_…`) registered or reused.
+    public var stripeWebhookEndpointId: String?
+    /// With `stripeKey`: true when an endpoint on the account already pointed at one of your Stripe connections, which is returned instead of a new one.
+    public var reused: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
         case provider = "provider"
+        case status = "status"
         case webhookSecret = "webhookSecret"
         case webhookUrl = "webhookUrl"
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
+        case programIds = "programIds"
+        case stripeWebhookEndpointId = "stripeWebhookEndpointId"
+        case reused = "reused"
     }
 
-    public init(id: String, provider: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil) {
+    public init(id: String, provider: String, status: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, stripeWebhookEndpointId: String? = nil, reused: Bool? = nil) {
         self.id = id
         self.provider = provider
+        self.status = status
         self.webhookSecret = webhookSecret
         self.webhookUrl = webhookUrl
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
+        self.programIds = programIds
+        self.stripeWebhookEndpointId = stripeWebhookEndpointId
+        self.reused = reused
     }
 }
 
@@ -1266,6 +1408,7 @@ public struct BillingEvent: Codable, Sendable, Equatable {
     public var productRef: String
     /// ignored_by_filter: recorded, never processed (product filter or internal customer).
     public var status: String
+    /// Why it earned nothing. no_referral_in_scope (status processed): the customer is referred only in programs outside the connection's programIds.
     public var ignoredReason: String?
     /// The productIds, priceIds and skus the event named.
     public var catalog: [String: [String]]?
@@ -9117,6 +9260,8 @@ public struct GetPartnersIdSummaryResponse: Codable, Sendable, Equatable {
     public var code: String?
     /// Their newest link in the program; null when they have only a coupon.
     public var linkUrl: String?
+    /// The program's terms (as `GET /v1/programs/{id}/terms`); null when it has no rule yet.
+    public var terms: ProgramTerms?
 
     enum CodingKeys: String, CodingKey {
         case partnerId = "partnerId"
@@ -9127,9 +9272,10 @@ public struct GetPartnersIdSummaryResponse: Codable, Sendable, Equatable {
         case balances = "balances"
         case code = "code"
         case linkUrl = "linkUrl"
+        case terms = "terms"
     }
 
-    public init(partnerId: String, programId: String? = nil, clicks: Int, referrals: GetPartnersIdSummaryResponseReferrals, convertedCustomers: Int, balances: [Balance], code: String? = nil, linkUrl: String? = nil) {
+    public init(partnerId: String, programId: String? = nil, clicks: Int, referrals: GetPartnersIdSummaryResponseReferrals, convertedCustomers: Int, balances: [Balance], code: String? = nil, linkUrl: String? = nil, terms: ProgramTerms? = nil) {
         self.partnerId = partnerId
         self.programId = programId
         self.clicks = clicks
@@ -9138,6 +9284,7 @@ public struct GetPartnersIdSummaryResponse: Codable, Sendable, Equatable {
         self.balances = balances
         self.code = code
         self.linkUrl = linkUrl
+        self.terms = terms
     }
 }
 
@@ -21692,6 +21839,8 @@ public struct GetProgramsIdStripeCreditsResponse: Codable, Sendable, Equatable {
     public var balanceCurrency: String?
     /// When set, a referrer no Stripe customer matches gets one created with this extra metadata.
     public var createCustomerIfMissing: GetProgramsIdStripeCreditsResponseCreateCustomerIfMissingOption1?
+    /// A credit with no matching Stripe customer stays pending (no attempt cap) until one is billing-linked, instead of no_customer.
+    public var waitForCustomer: Bool
     public var keyConnected: Bool
     public var hasOwnKey: Bool
 
@@ -21703,11 +21852,12 @@ public struct GetProgramsIdStripeCreditsResponse: Codable, Sendable, Equatable {
         case refereeRewards = "refereeRewards"
         case balanceCurrency = "balanceCurrency"
         case createCustomerIfMissing = "createCustomerIfMissing"
+        case waitForCustomer = "waitForCustomer"
         case keyConnected = "keyConnected"
         case hasOwnKey = "hasOwnKey"
     }
 
-    public init(programId: String, enabled: Bool, referrerMatch: String, metadataKey: String? = nil, refereeRewards: Bool, balanceCurrency: String? = nil, createCustomerIfMissing: GetProgramsIdStripeCreditsResponseCreateCustomerIfMissingOption1? = nil, keyConnected: Bool, hasOwnKey: Bool) {
+    public init(programId: String, enabled: Bool, referrerMatch: String, metadataKey: String? = nil, refereeRewards: Bool, balanceCurrency: String? = nil, createCustomerIfMissing: GetProgramsIdStripeCreditsResponseCreateCustomerIfMissingOption1? = nil, waitForCustomer: Bool, keyConnected: Bool, hasOwnKey: Bool) {
         self.programId = programId
         self.enabled = enabled
         self.referrerMatch = referrerMatch
@@ -21715,6 +21865,7 @@ public struct GetProgramsIdStripeCreditsResponse: Codable, Sendable, Equatable {
         self.refereeRewards = refereeRewards
         self.balanceCurrency = balanceCurrency
         self.createCustomerIfMissing = createCustomerIfMissing
+        self.waitForCustomer = waitForCustomer
         self.keyConnected = keyConnected
         self.hasOwnKey = hasOwnKey
     }
@@ -24308,12 +24459,60 @@ public struct PostBillingConnectionsBodyFilter: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostBillingConnectionsBodyCreditRailCreateCustomerIfMissingOption1: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+    }
+
+    public init(metadata: [String: String]? = nil) {
+        self.metadata = metadata
+    }
+}
+
+public struct PostBillingConnectionsBodyCreditRail: Codable, Sendable, Equatable {
+    public var enabled: Bool?
+    public var referrerMatch: String?
+    public var metadataKey: String?
+    public var refereeRewards: Bool?
+    public var balanceCurrency: String?
+    public var createCustomerIfMissing: PostBillingConnectionsBodyCreditRailCreateCustomerIfMissingOption1?
+    public var waitForCustomer: Bool?
+    public var programId: String
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case referrerMatch = "referrerMatch"
+        case metadataKey = "metadataKey"
+        case refereeRewards = "refereeRewards"
+        case balanceCurrency = "balanceCurrency"
+        case createCustomerIfMissing = "createCustomerIfMissing"
+        case waitForCustomer = "waitForCustomer"
+        case programId = "programId"
+    }
+
+    public init(enabled: Bool? = nil, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil, balanceCurrency: String? = nil, createCustomerIfMissing: PostBillingConnectionsBodyCreditRailCreateCustomerIfMissingOption1? = nil, waitForCustomer: Bool? = nil, programId: String) {
+        self.enabled = enabled
+        self.referrerMatch = referrerMatch
+        self.metadataKey = metadataKey
+        self.refereeRewards = refereeRewards
+        self.balanceCurrency = balanceCurrency
+        self.createCustomerIfMissing = createCustomerIfMissing
+        self.waitForCustomer = waitForCustomer
+        self.programId = programId
+    }
+}
+
 public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
     public var provider: String
     public var name: String?
     public var webhookSecret: String?
     public var filter: PostBillingConnectionsBodyFilter?
     public var customerRefMetadataKey: String?
+    public var programIds: [String]?
+    public var stripeKey: String?
+    public var creditRail: PostBillingConnectionsBodyCreditRail?
 
     enum CodingKeys: String, CodingKey {
         case provider = "provider"
@@ -24321,14 +24520,20 @@ public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
         case webhookSecret = "webhookSecret"
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
+        case programIds = "programIds"
+        case stripeKey = "stripeKey"
+        case creditRail = "creditRail"
     }
 
-    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil, customerRefMetadataKey: String? = nil) {
+    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, stripeKey: String? = nil, creditRail: PostBillingConnectionsBodyCreditRail? = nil) {
         self.provider = provider
         self.name = name
         self.webhookSecret = webhookSecret
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
+        self.programIds = programIds
+        self.stripeKey = stripeKey
+        self.creditRail = creditRail
     }
 }
 
@@ -24391,19 +24596,22 @@ public struct PatchBillingConnectionsIdBody: Codable, Sendable, Equatable {
     public var name: String?
     public var filter: PatchBillingConnectionsIdBodyFilterOption1?
     public var customerRefMetadataKey: String?
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case status = "status"
         case name = "name"
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
+        case programIds = "programIds"
     }
 
-    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil, customerRefMetadataKey: String? = nil) {
+    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil) {
         self.status = status
         self.name = name
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
+        self.programIds = programIds
     }
 }
 
@@ -27444,6 +27652,7 @@ public struct PutProgramsIdStripeCreditsBody: Codable, Sendable, Equatable {
     public var refereeRewards: Bool?
     public var balanceCurrency: String?
     public var createCustomerIfMissing: PutProgramsIdStripeCreditsBodyCreateCustomerIfMissingOption1?
+    public var waitForCustomer: Bool?
     public var secretKey: String?
 
     enum CodingKeys: String, CodingKey {
@@ -27453,16 +27662,18 @@ public struct PutProgramsIdStripeCreditsBody: Codable, Sendable, Equatable {
         case refereeRewards = "refereeRewards"
         case balanceCurrency = "balanceCurrency"
         case createCustomerIfMissing = "createCustomerIfMissing"
+        case waitForCustomer = "waitForCustomer"
         case secretKey = "secretKey"
     }
 
-    public init(enabled: Bool, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil, balanceCurrency: String? = nil, createCustomerIfMissing: PutProgramsIdStripeCreditsBodyCreateCustomerIfMissingOption1? = nil, secretKey: String? = nil) {
+    public init(enabled: Bool, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil, balanceCurrency: String? = nil, createCustomerIfMissing: PutProgramsIdStripeCreditsBodyCreateCustomerIfMissingOption1? = nil, waitForCustomer: Bool? = nil, secretKey: String? = nil) {
         self.enabled = enabled
         self.referrerMatch = referrerMatch
         self.metadataKey = metadataKey
         self.refereeRewards = refereeRewards
         self.balanceCurrency = balanceCurrency
         self.createCustomerIfMissing = createCustomerIfMissing
+        self.waitForCustomer = waitForCustomer
         self.secretKey = secretKey
     }
 }
