@@ -54,6 +54,9 @@ public final class IdempotencyInProgressError: APIError, @unchecked Sendable {}
 /// `stripe_key_required` (HTTP 409).
 public final class StripeKeyRequiredError: APIError, @unchecked Sendable {}
 
+/// `api_key_expired` (HTTP 409).
+public final class ApiKeyExpiredError: APIError, @unchecked Sendable {}
+
 /// `replay` (HTTP 409).
 public final class ReplayError: APIError, @unchecked Sendable {}
 
@@ -72,6 +75,15 @@ public final class GoneError: APIError, @unchecked Sendable {}
 /// `idempotency_key_reused` (HTTP 422).
 public final class IdempotencyKeyReusedError: APIError, @unchecked Sendable {}
 
+/// `stripe_key_invalid` (HTTP 422).
+public final class StripeKeyInvalidError: APIError, @unchecked Sendable {}
+
+/// `stripe_key_wrong_mode` (HTTP 422).
+public final class StripeKeyWrongModeError: APIError, @unchecked Sendable {}
+
+/// `stripe_key_permission` (HTTP 422).
+public final class StripeKeyPermissionError: APIError, @unchecked Sendable {}
+
 /// `payload_too_large` (HTTP 413).
 public final class PayloadTooLargeError: APIError, @unchecked Sendable {}
 
@@ -86,6 +98,9 @@ public final class InternalServerError: APIError, @unchecked Sendable {}
 
 /// `atlas_error` (HTTP 502).
 public final class AtlasError: APIError, @unchecked Sendable {}
+
+/// `stripe_unavailable` (HTTP 502).
+public final class StripeUnavailableError: APIError, @unchecked Sendable {}
 
 /// `sso_provider_error` (HTTP 502).
 public final class SsoProviderError: APIError, @unchecked Sendable {}
@@ -112,17 +127,22 @@ extension APIError {
         "conflict": ConflictError.self,
         "idempotency_in_progress": IdempotencyInProgressError.self,
         "stripe_key_required": StripeKeyRequiredError.self,
+        "api_key_expired": ApiKeyExpiredError.self,
         "replay": ReplayError.self,
         "live_mode_only": LiveModeOnlyError.self,
         "test_mode_only": TestModeOnlyError.self,
         "test_mode_unsupported": TestModeUnsupportedError.self,
         "gone": GoneError.self,
         "idempotency_key_reused": IdempotencyKeyReusedError.self,
+        "stripe_key_invalid": StripeKeyInvalidError.self,
+        "stripe_key_wrong_mode": StripeKeyWrongModeError.self,
+        "stripe_key_permission": StripeKeyPermissionError.self,
         "payload_too_large": PayloadTooLargeError.self,
         "connection_paused": ConnectionPausedError.self,
         "rate_limited": RateLimitedError.self,
         "internal_error": InternalServerError.self,
         "atlas_error": AtlasError.self,
+        "stripe_unavailable": StripeUnavailableError.self,
         "sso_provider_error": SsoProviderError.self,
         "sso_not_configured": SsoNotConfiguredError.self,
     ]

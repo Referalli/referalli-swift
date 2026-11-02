@@ -5861,6 +5861,141 @@ public struct PrivacyRequestCompletedEvent: Codable, Sendable, Equatable {
     }
 }
 
+/// `data` of a `api_key.expiring` event: Sent 30, 7 and 1 days before an API key with an expiry stops working (once each; a key first seen inside a window gets only that notice). Rotate it with `POST /v1/api-keys/{id}/rotate` or extend it with `PATCH /v1/api-keys/{id}`. A key rotated out (in its grace period) gets no notice.
+public struct ApiKeyExpiringEventData: Codable, Sendable, Equatable {
+    public var keyId: String
+    public var name: String
+    /// The first 12 characters of the secret, as listed.
+    public var prefix: String
+    public var owner: String?
+    public var expiresAt: String
+    /// Which notice this is.
+    public var daysBefore: Int
+
+    enum CodingKeys: String, CodingKey {
+        case keyId = "keyId"
+        case name = "name"
+        case prefix = "prefix"
+        case owner = "owner"
+        case expiresAt = "expiresAt"
+        case daysBefore = "daysBefore"
+    }
+
+    public init(keyId: String, name: String, prefix: String, owner: String? = nil, expiresAt: String, daysBefore: Int) {
+        self.keyId = keyId
+        self.name = name
+        self.prefix = prefix
+        self.owner = owner
+        self.expiresAt = expiresAt
+        self.daysBefore = daysBefore
+    }
+}
+
+/// An API key expires soon: the `api_key.expiring` delivery body.
+public struct ApiKeyExpiringEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: ApiKeyExpiringEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: ApiKeyExpiringEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+public struct FxRatesUpdatedEventDataPairsItem: Codable, Sendable, Equatable {
+    /// Lowercase ISO 4217 code.
+    public var base: String
+    /// Lowercase ISO 4217 code.
+    public var quote: String
+    /// Exact decimal string; null when the override was cleared.
+    public var rate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case base = "base"
+        case quote = "quote"
+        case rate = "rate"
+    }
+
+    public init(base: String, quote: String, rate: String? = nil) {
+        self.base = base
+        self.quote = quote
+        self.rate = rate
+    }
+}
+
+/// `data` of a `fx.rates_updated` event: Sent when the rates your cross-currency payouts convert at change: a rate recorded with `POST /v1/fx-rates` (`recorded`), new daily feed rates (`feed_synced`, once per sync that inserted any), or a manual rate cleared back to the feed (`override_cleared`, `rate` null). Read the current rates with `GET /v1/fx-rates`. Org-wide, so program-scoped webhook endpoints never get it.
+public struct FxRatesUpdatedEventData: Codable, Sendable, Equatable {
+    public var reason: String
+    /// `manual` for a recorded or cleared rate, or the feed (`ecb`).
+    public var source: String
+    /// When the new rates take effect; null for a cleared override.
+    public var effectiveAt: String?
+    public var pairs: [FxRatesUpdatedEventDataPairsItem]
+
+    enum CodingKeys: String, CodingKey {
+        case reason = "reason"
+        case source = "source"
+        case effectiveAt = "effectiveAt"
+        case pairs = "pairs"
+    }
+
+    public init(reason: String, source: String, effectiveAt: String? = nil, pairs: [FxRatesUpdatedEventDataPairsItem]) {
+        self.reason = reason
+        self.source = source
+        self.effectiveAt = effectiveAt
+        self.pairs = pairs
+    }
+}
+
+/// The org's FX rates changed: the `fx.rates_updated` delivery body.
+public struct FxRatesUpdatedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: FxRatesUpdatedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: FxRatesUpdatedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
 /// `data` of a `webhook_endpoint.disabled` event: Sent to your other active endpoints when one is disabled after every delivery failed for 72 hours (or 1000 attempts in a row).
 public struct WebhookEndpointDisabledEventData: Codable, Sendable, Equatable {
     public var endpointId: String
@@ -5992,7 +6127,12 @@ public struct StripeCreditAppliedEventData: Codable, Sendable, Equatable {
     public var customerRef: String?
     /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
     public var amountMinor: Int
+    /// The commission's currency.
     public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
     public var stripeCustomerId: String?
     public var status: String
     public var attempts: Int
@@ -6011,6 +6151,8 @@ public struct StripeCreditAppliedEventData: Codable, Sendable, Equatable {
         case customerRef = "customerRef"
         case amountMinor = "amountMinor"
         case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
         case stripeCustomerId = "stripeCustomerId"
         case status = "status"
         case attempts = "attempts"
@@ -6020,7 +6162,7 @@ public struct StripeCreditAppliedEventData: Codable, Sendable, Equatable {
         case updatedAt = "updatedAt"
     }
 
-    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
         self.id = id
         self.programId = programId
         self.sourceEventId = sourceEventId
@@ -6030,6 +6172,8 @@ public struct StripeCreditAppliedEventData: Codable, Sendable, Equatable {
         self.customerRef = customerRef
         self.amountMinor = amountMinor
         self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
         self.stripeCustomerId = stripeCustomerId
         self.status = status
         self.attempts = attempts
@@ -6070,7 +6214,7 @@ public struct StripeCreditAppliedEvent: Codable, Sendable, Equatable {
     }
 }
 
-/// `data` of a `stripe_credit.failed` event: The Stripe balance credit rail stopped retrying a credit or debit after its last attempt: no Stripe customer matched (`no_customer`) or Stripe refused it (`failed`). `lastError` says why.
+/// `data` of a `stripe_credit.failed` event: The Stripe balance credit rail stopped retrying a credit or debit after its last attempt: no Stripe customer matched (`no_customer`), several did (`ambiguous_customer`), no FX rate converts to the balance currency (`fx_rate_missing`) or Stripe refused it (`failed`). `POST /v1/programs/{id}/stripe-credits/requeue` gives the first three another round. `lastError` says why.
 public struct StripeCreditFailedEventData: Codable, Sendable, Equatable {
     public var id: String
     public var programId: String
@@ -6082,7 +6226,12 @@ public struct StripeCreditFailedEventData: Codable, Sendable, Equatable {
     public var customerRef: String?
     /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
     public var amountMinor: Int
+    /// The commission's currency.
     public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
     public var stripeCustomerId: String?
     public var status: String
     public var attempts: Int
@@ -6101,6 +6250,8 @@ public struct StripeCreditFailedEventData: Codable, Sendable, Equatable {
         case customerRef = "customerRef"
         case amountMinor = "amountMinor"
         case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
         case stripeCustomerId = "stripeCustomerId"
         case status = "status"
         case attempts = "attempts"
@@ -6110,7 +6261,7 @@ public struct StripeCreditFailedEventData: Codable, Sendable, Equatable {
         case updatedAt = "updatedAt"
     }
 
-    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
         self.id = id
         self.programId = programId
         self.sourceEventId = sourceEventId
@@ -6120,6 +6271,8 @@ public struct StripeCreditFailedEventData: Codable, Sendable, Equatable {
         self.customerRef = customerRef
         self.amountMinor = amountMinor
         self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
         self.stripeCustomerId = stripeCustomerId
         self.status = status
         self.attempts = attempts
@@ -7915,6 +8068,8 @@ public struct PostProgramsIdReferrersResponse: Codable, Sendable, Equatable {
     }
 }
 
+public typealias PostProgramsIdEnrollmentsResponse = JSONValue
+
 public struct GetProgramsIdEnrollmentsResponseDataItem: Codable, Sendable, Equatable {
     public var id: String
     public var partnerId: String
@@ -8000,6 +8155,8 @@ public struct PostProgramsIdEnrollmentsEnrollmentIdRejectResponse: Codable, Send
         self.status = status
     }
 }
+
+public typealias PostPartnersResponse = JSONValue
 
 public struct GetPartnersResponse: Codable, Sendable, Equatable {
     public var object: String
@@ -8146,6 +8303,8 @@ public struct PatchApiKeysIdResponse: Codable, Sendable, Equatable {
         self.programIds = programIds
     }
 }
+
+public typealias PostApiKeysIdRotateResponse = JSONValue
 
 public struct DeleteApiKeysIdResponse: Codable, Sendable, Equatable {
     public var ok: Bool
@@ -11290,6 +11449,7 @@ public struct PostWebhookEndpointsResponse: Codable, Sendable, Equatable {
     public var programIds: [String]?
     public var legacySignature: Bool
     public var alertContacts: [String]
+    public var status: String
     /// Returned only here. whsec_ + base64 key (Standard Webhooks).
     public var secret: String
 
@@ -11300,16 +11460,18 @@ public struct PostWebhookEndpointsResponse: Codable, Sendable, Equatable {
         case programIds = "programIds"
         case legacySignature = "legacySignature"
         case alertContacts = "alertContacts"
+        case status = "status"
         case secret = "secret"
     }
 
-    public init(id: String, url: String, topics: [String], programIds: [String]? = nil, legacySignature: Bool, alertContacts: [String], secret: String) {
+    public init(id: String, url: String, topics: [String], programIds: [String]? = nil, legacySignature: Bool, alertContacts: [String], status: String, secret: String) {
         self.id = id
         self.url = url
         self.topics = topics
         self.programIds = programIds
         self.legacySignature = legacySignature
         self.alertContacts = alertContacts
+        self.status = status
         self.secret = secret
     }
 }
@@ -11442,6 +11604,119 @@ public struct PostSandboxSimulateResponse: Codable, Sendable, Equatable {
         self.conversions = conversions
         self.linesCreated = linesCreated
         self.reversals = reversals
+    }
+}
+
+public struct GetSandboxStripeFixturesResponseDataItem: Codable, Sendable, Equatable {
+    public var event: String
+    /// The `overrides` fields this fixture uses.
+    public var overrides: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case event = "event"
+        case overrides = "overrides"
+    }
+
+    public init(event: String, overrides: [String]) {
+        self.event = event
+        self.overrides = overrides
+    }
+}
+
+public struct GetSandboxStripeFixturesResponse: Codable, Sendable, Equatable {
+    public var data: [GetSandboxStripeFixturesResponseDataItem]
+
+    enum CodingKeys: String, CodingKey {
+        case data = "data"
+    }
+
+    public init(data: [GetSandboxStripeFixturesResponseDataItem]) {
+        self.data = data
+    }
+}
+
+public struct PostSandboxStripeFixturesResponseResultsItem: Codable, Sendable, Equatable {
+    public var duplicate: Bool
+    public var billingEventId: String?
+    public var conversions: Int
+    public var linesCreated: Int
+    public var reversals: Int
+    public var ignored: String?
+
+    enum CodingKeys: String, CodingKey {
+        case duplicate = "duplicate"
+        case billingEventId = "billingEventId"
+        case conversions = "conversions"
+        case linesCreated = "linesCreated"
+        case reversals = "reversals"
+        case ignored = "ignored"
+    }
+
+    public init(duplicate: Bool, billingEventId: String? = nil, conversions: Int, linesCreated: Int, reversals: Int, ignored: String? = nil) {
+        self.duplicate = duplicate
+        self.billingEventId = billingEventId
+        self.conversions = conversions
+        self.linesCreated = linesCreated
+        self.reversals = reversals
+        self.ignored = ignored
+    }
+}
+
+public struct PostSandboxStripeFixturesResponseCommissionsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var type: String
+    public var partnerId: String
+    public var amountMinor: Int
+    public var currency: String
+    public var relatedCommissionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case type = "type"
+        case partnerId = "partnerId"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case relatedCommissionId = "relatedCommissionId"
+    }
+
+    public init(id: String, type: String, partnerId: String, amountMinor: Int, currency: String, relatedCommissionId: String? = nil) {
+        self.id = id
+        self.type = type
+        self.partnerId = partnerId
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.relatedCommissionId = relatedCommissionId
+    }
+}
+
+public struct PostSandboxStripeFixturesResponse: Codable, Sendable, Equatable {
+    /// The Stripe event id sent (`evt_fixture_…`, or your `eventId`).
+    public var eventId: String
+    public var event: String
+    /// Billing events the connector parsed from the fixture.
+    public var received: Int
+    public var results: [PostSandboxStripeFixturesResponseResultsItem]
+    /// Commission events the fixture created (earned, reversed…).
+    public var commissions: [PostSandboxStripeFixturesResponseCommissionsItem]
+    /// The Stripe event that was processed.
+    public var payload: GetOpenapiJsonResponse
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "eventId"
+        case event = "event"
+        case received = "received"
+        case results = "results"
+        case commissions = "commissions"
+        case payload = "payload"
+    }
+
+    public init(eventId: String, event: String, received: Int, results: [PostSandboxStripeFixturesResponseResultsItem], commissions: [PostSandboxStripeFixturesResponseCommissionsItem], payload: GetOpenapiJsonResponse) {
+        self.eventId = eventId
+        self.event = event
+        self.received = received
+        self.results = results
+        self.commissions = commissions
+        self.payload = payload
     }
 }
 
@@ -21395,13 +21670,30 @@ public struct GetStripeCreditsConnectionResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetProgramsIdStripeCreditsResponseCreateCustomerIfMissingOption1: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+    }
+
+    public init(metadata: [String: String]? = nil) {
+        self.metadata = metadata
+    }
+}
+
 public struct GetProgramsIdStripeCreditsResponse: Codable, Sendable, Equatable {
     public var programId: String
     public var enabled: Bool
     public var referrerMatch: String
     public var metadataKey: String?
     public var refereeRewards: Bool
+    /// Currency every credit is sent in; null = the Stripe customer's balance currency, else the commission's.
+    public var balanceCurrency: String?
+    /// When set, a referrer no Stripe customer matches gets one created with this extra metadata.
+    public var createCustomerIfMissing: GetProgramsIdStripeCreditsResponseCreateCustomerIfMissingOption1?
     public var keyConnected: Bool
+    public var hasOwnKey: Bool
 
     enum CodingKeys: String, CodingKey {
         case programId = "programId"
@@ -21409,16 +21701,37 @@ public struct GetProgramsIdStripeCreditsResponse: Codable, Sendable, Equatable {
         case referrerMatch = "referrerMatch"
         case metadataKey = "metadataKey"
         case refereeRewards = "refereeRewards"
+        case balanceCurrency = "balanceCurrency"
+        case createCustomerIfMissing = "createCustomerIfMissing"
         case keyConnected = "keyConnected"
+        case hasOwnKey = "hasOwnKey"
     }
 
-    public init(programId: String, enabled: Bool, referrerMatch: String, metadataKey: String? = nil, refereeRewards: Bool, keyConnected: Bool) {
+    public init(programId: String, enabled: Bool, referrerMatch: String, metadataKey: String? = nil, refereeRewards: Bool, balanceCurrency: String? = nil, createCustomerIfMissing: GetProgramsIdStripeCreditsResponseCreateCustomerIfMissingOption1? = nil, keyConnected: Bool, hasOwnKey: Bool) {
         self.programId = programId
         self.enabled = enabled
         self.referrerMatch = referrerMatch
         self.metadataKey = metadataKey
         self.refereeRewards = refereeRewards
+        self.balanceCurrency = balanceCurrency
+        self.createCustomerIfMissing = createCustomerIfMissing
         self.keyConnected = keyConnected
+        self.hasOwnKey = hasOwnKey
+    }
+}
+
+public struct PostProgramsIdStripeCreditsRequeueResponse: Codable, Sendable, Equatable {
+    public var requeued: Int
+    public var creditIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case requeued = "requeued"
+        case creditIds = "creditIds"
+    }
+
+    public init(requeued: Int, creditIds: [String]) {
+        self.requeued = requeued
+        self.creditIds = creditIds
     }
 }
 
@@ -21433,7 +21746,12 @@ public struct GetProgramsIdStripeCreditsLogResponseDataItem: Codable, Sendable, 
     public var customerRef: String?
     /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
     public var amountMinor: Int
+    /// The commission's currency.
     public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
     public var stripeCustomerId: String?
     public var status: String
     public var attempts: Int
@@ -21452,6 +21770,8 @@ public struct GetProgramsIdStripeCreditsLogResponseDataItem: Codable, Sendable, 
         case customerRef = "customerRef"
         case amountMinor = "amountMinor"
         case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
         case stripeCustomerId = "stripeCustomerId"
         case status = "status"
         case attempts = "attempts"
@@ -21461,7 +21781,7 @@ public struct GetProgramsIdStripeCreditsLogResponseDataItem: Codable, Sendable, 
         case updatedAt = "updatedAt"
     }
 
-    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, stripeCustomerId: String? = nil, status: String, attempts: Int, stripeBalanceTransactionId: String? = nil, lastError: String? = nil, createdAt: String, updatedAt: String) {
         self.id = id
         self.programId = programId
         self.sourceEventId = sourceEventId
@@ -21471,6 +21791,8 @@ public struct GetProgramsIdStripeCreditsLogResponseDataItem: Codable, Sendable, 
         self.customerRef = customerRef
         self.amountMinor = amountMinor
         self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
         self.stripeCustomerId = stripeCustomerId
         self.status = status
         self.attempts = attempts
@@ -23092,18 +23414,48 @@ public struct PostProgramsIdReferrersBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostProgramsIdEnrollmentsBodyMintLink: Codable, Sendable, Equatable {
+    public var destinationUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case destinationUrl = "destinationUrl"
+    }
+
+    public init(destinationUrl: String? = nil) {
+        self.destinationUrl = destinationUrl
+    }
+}
+
+public struct PostProgramsIdEnrollmentsBodyMint: Codable, Sendable, Equatable {
+    public var coupon: Bool?
+    public var link: PostProgramsIdEnrollmentsBodyMintLink?
+
+    enum CodingKeys: String, CodingKey {
+        case coupon = "coupon"
+        case link = "link"
+    }
+
+    public init(coupon: Bool? = nil, link: PostProgramsIdEnrollmentsBodyMintLink? = nil) {
+        self.coupon = coupon
+        self.link = link
+    }
+}
+
 public struct PostProgramsIdEnrollmentsBody: Codable, Sendable, Equatable {
     public var partnerId: String
     public var externalRef: String?
+    public var mint: PostProgramsIdEnrollmentsBodyMint?
 
     enum CodingKeys: String, CodingKey {
         case partnerId = "partnerId"
         case externalRef = "externalRef"
+        case mint = "mint"
     }
 
-    public init(partnerId: String, externalRef: String? = nil) {
+    public init(partnerId: String, externalRef: String? = nil, mint: PostProgramsIdEnrollmentsBodyMint? = nil) {
         self.partnerId = partnerId
         self.externalRef = externalRef
+        self.mint = mint
     }
 }
 
@@ -23212,6 +23564,18 @@ public struct PatchApiKeysIdBody: Codable, Sendable, Equatable {
         self.owner = owner
         self.expiresInDays = expiresInDays
         self.programIds = programIds
+    }
+}
+
+public struct PostApiKeysIdRotateBody: Codable, Sendable, Equatable {
+    public var graceHours: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case graceHours = "graceHours"
+    }
+
+    public init(graceHours: Int? = nil) {
+        self.graceHours = graceHours
     }
 }
 
@@ -24722,6 +25086,7 @@ public struct PostWebhookEndpointsBody: Codable, Sendable, Equatable {
     public var legacySignature: Bool?
     public var programIds: [String]?
     public var alertContacts: [String]?
+    public var status: String?
 
     enum CodingKeys: String, CodingKey {
         case url = "url"
@@ -24729,14 +25094,16 @@ public struct PostWebhookEndpointsBody: Codable, Sendable, Equatable {
         case legacySignature = "legacySignature"
         case programIds = "programIds"
         case alertContacts = "alertContacts"
+        case status = "status"
     }
 
-    public init(url: String, topics: [String]? = nil, legacySignature: Bool? = nil, programIds: [String]? = nil, alertContacts: [String]? = nil) {
+    public init(url: String, topics: [String]? = nil, legacySignature: Bool? = nil, programIds: [String]? = nil, alertContacts: [String]? = nil, status: String? = nil) {
         self.url = url
         self.topics = topics
         self.legacySignature = legacySignature
         self.programIds = programIds
         self.alertContacts = alertContacts
+        self.status = status
     }
 }
 
@@ -24788,6 +25155,54 @@ public struct PostSandboxSimulateBody: Codable, Sendable, Equatable {
         self.scenario = scenario
         self.priceMinor = priceMinor
         self.months = months
+    }
+}
+
+public struct PostSandboxStripeFixturesBodyOverrides: Codable, Sendable, Equatable {
+    public var customerRef: String?
+    public var amountMinor: Int?
+    public var currency: String?
+    public var metadata: [String: String]?
+    public var invoiceId: String?
+    public var chargeId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case metadata = "metadata"
+        case invoiceId = "invoiceId"
+        case chargeId = "chargeId"
+    }
+
+    public init(customerRef: String? = nil, amountMinor: Int? = nil, currency: String? = nil, metadata: [String: String]? = nil, invoiceId: String? = nil, chargeId: String? = nil) {
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.metadata = metadata
+        self.invoiceId = invoiceId
+        self.chargeId = chargeId
+    }
+}
+
+public struct PostSandboxStripeFixturesBody: Codable, Sendable, Equatable {
+    public var connectionId: String
+    public var event: String
+    public var eventId: String?
+    public var overrides: PostSandboxStripeFixturesBodyOverrides?
+
+    enum CodingKeys: String, CodingKey {
+        case connectionId = "connectionId"
+        case event = "event"
+        case eventId = "eventId"
+        case overrides = "overrides"
+    }
+
+    public init(connectionId: String, event: String, eventId: String? = nil, overrides: PostSandboxStripeFixturesBodyOverrides? = nil) {
+        self.connectionId = connectionId
+        self.event = event
+        self.eventId = eventId
+        self.overrides = overrides
     }
 }
 
@@ -27010,24 +27425,57 @@ public struct PutStripeCreditsConnectionBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutProgramsIdStripeCreditsBodyCreateCustomerIfMissingOption1: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+    }
+
+    public init(metadata: [String: String]? = nil) {
+        self.metadata = metadata
+    }
+}
+
 public struct PutProgramsIdStripeCreditsBody: Codable, Sendable, Equatable {
     public var enabled: Bool
     public var referrerMatch: String?
     public var metadataKey: String?
     public var refereeRewards: Bool?
+    public var balanceCurrency: String?
+    public var createCustomerIfMissing: PutProgramsIdStripeCreditsBodyCreateCustomerIfMissingOption1?
+    public var secretKey: String?
 
     enum CodingKeys: String, CodingKey {
         case enabled = "enabled"
         case referrerMatch = "referrerMatch"
         case metadataKey = "metadataKey"
         case refereeRewards = "refereeRewards"
+        case balanceCurrency = "balanceCurrency"
+        case createCustomerIfMissing = "createCustomerIfMissing"
+        case secretKey = "secretKey"
     }
 
-    public init(enabled: Bool, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil) {
+    public init(enabled: Bool, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil, balanceCurrency: String? = nil, createCustomerIfMissing: PutProgramsIdStripeCreditsBodyCreateCustomerIfMissingOption1? = nil, secretKey: String? = nil) {
         self.enabled = enabled
         self.referrerMatch = referrerMatch
         self.metadataKey = metadataKey
         self.refereeRewards = refereeRewards
+        self.balanceCurrency = balanceCurrency
+        self.createCustomerIfMissing = createCustomerIfMissing
+        self.secretKey = secretKey
+    }
+}
+
+public struct PostProgramsIdStripeCreditsRequeueBody: Codable, Sendable, Equatable {
+    public var creditIds: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case creditIds = "creditIds"
+    }
+
+    public init(creditIds: [String]? = nil) {
+        self.creditIds = creditIds
     }
 }
 

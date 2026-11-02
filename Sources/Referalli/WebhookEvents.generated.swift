@@ -5,6 +5,8 @@ import Foundation
 
 /// Every webhook topic the API publishes.
 public enum WebhookTopic {
+    /// `api_key.expiring`: An API key expires soon
+    public static let apiKeyExpiring = "api_key.expiring"
     /// `billing_event.recorded`: A billing event was recorded
     public static let billingEventRecorded = "billing_event.recorded"
     /// `click.recorded`: A tracked click was recorded
@@ -25,6 +27,8 @@ public enum WebhookTopic {
     public static let disputeResolved = "dispute.resolved"
     /// `fraud.case_opened`: A fraud case was opened
     public static let fraudCaseOpened = "fraud.case_opened"
+    /// `fx.rates_updated`: The org's FX rates changed
+    public static let fxRatesUpdated = "fx.rates_updated"
     /// `partner.applied`: A partner applied to a program
     public static let partnerApplied = "partner.applied"
     /// `partner.approved`: A partner was approved
@@ -81,11 +85,13 @@ public enum WebhookTopic {
     public static let webhookEndpointRecovered = "webhook_endpoint.recovered"
 
     /// Every topic.
-    public static let all: [String] = ["billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
+    public static let all: [String] = ["api_key.expiring", "billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "fx.rates_updated", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
 }
 
 /// A webhook event's payload, typed by topic. `.unknown` is a topic this SDK predates.
 public enum WebhookPayload: Sendable {
+    /// `api_key.expiring`
+    case apiKeyExpiring(ApiKeyExpiringEventData)
     /// `billing_event.recorded`
     case billingEventRecorded(BillingEventRecordedEventData)
     /// `click.recorded`
@@ -106,6 +112,8 @@ public enum WebhookPayload: Sendable {
     case disputeResolved(DisputeResolvedEventData)
     /// `fraud.case_opened`
     case fraudCaseOpened(FraudCaseOpenedEventData)
+    /// `fx.rates_updated`
+    case fxRatesUpdated(FxRatesUpdatedEventData)
     /// `partner.applied`
     case partnerApplied(PartnerAppliedEventData)
     /// `partner.approved`
@@ -164,6 +172,8 @@ public enum WebhookPayload: Sendable {
 
     static func decode(topic: String, data: JSONValue) throws -> WebhookPayload {
         switch topic {
+        case "api_key.expiring":
+            return .apiKeyExpiring(try ReferalliClient.decode(ApiKeyExpiringEventData.self, from: data))
         case "billing_event.recorded":
             return .billingEventRecorded(try ReferalliClient.decode(BillingEventRecordedEventData.self, from: data))
         case "click.recorded":
@@ -184,6 +194,8 @@ public enum WebhookPayload: Sendable {
             return .disputeResolved(try ReferalliClient.decode(DisputeResolvedEventData.self, from: data))
         case "fraud.case_opened":
             return .fraudCaseOpened(try ReferalliClient.decode(FraudCaseOpenedEventData.self, from: data))
+        case "fx.rates_updated":
+            return .fxRatesUpdated(try ReferalliClient.decode(FxRatesUpdatedEventData.self, from: data))
         case "partner.applied":
             return .partnerApplied(try ReferalliClient.decode(PartnerAppliedEventData.self, from: data))
         case "partner.approved":
