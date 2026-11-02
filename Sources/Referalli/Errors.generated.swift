@@ -45,6 +45,9 @@ public final class RestrictedSessionError: APIError, @unchecked Sendable {}
 /// `not_found` (HTTP 404).
 public final class NotFoundError: APIError, @unchecked Sendable {}
 
+/// `not_enrolled` (HTTP 404).
+public final class NotEnrolledError: APIError, @unchecked Sendable {}
+
 /// `conflict` (HTTP 409).
 public final class ConflictError: APIError, @unchecked Sendable {}
 
@@ -53,6 +56,9 @@ public final class IdempotencyInProgressError: APIError, @unchecked Sendable {}
 
 /// `stripe_key_required` (HTTP 409).
 public final class StripeKeyRequiredError: APIError, @unchecked Sendable {}
+
+/// `credit_credentials_required` (HTTP 409).
+public final class CreditCredentialsRequiredError: APIError, @unchecked Sendable {}
 
 /// `api_key_expired` (HTTP 409).
 public final class ApiKeyExpiredError: APIError, @unchecked Sendable {}
@@ -84,6 +90,15 @@ public final class StripeKeyWrongModeError: APIError, @unchecked Sendable {}
 /// `stripe_key_permission` (HTTP 422).
 public final class StripeKeyPermissionError: APIError, @unchecked Sendable {}
 
+/// `provider_credentials_invalid` (HTTP 422).
+public final class ProviderCredentialsInvalidError: APIError, @unchecked Sendable {}
+
+/// `provider_credentials_wrong_mode` (HTTP 422).
+public final class ProviderCredentialsWrongModeError: APIError, @unchecked Sendable {}
+
+/// `provider_permission` (HTTP 422).
+public final class ProviderPermissionError: APIError, @unchecked Sendable {}
+
 /// `payload_too_large` (HTTP 413).
 public final class PayloadTooLargeError: APIError, @unchecked Sendable {}
 
@@ -101,6 +116,9 @@ public final class AtlasError: APIError, @unchecked Sendable {}
 
 /// `stripe_unavailable` (HTTP 502).
 public final class StripeUnavailableError: APIError, @unchecked Sendable {}
+
+/// `provider_unavailable` (HTTP 502).
+public final class ProviderUnavailableError: APIError, @unchecked Sendable {}
 
 /// `sso_provider_error` (HTTP 502).
 public final class SsoProviderError: APIError, @unchecked Sendable {}
@@ -124,9 +142,11 @@ extension APIError {
         "program_scoped_key": ProgramScopedKeyError.self,
         "restricted_session": RestrictedSessionError.self,
         "not_found": NotFoundError.self,
+        "not_enrolled": NotEnrolledError.self,
         "conflict": ConflictError.self,
         "idempotency_in_progress": IdempotencyInProgressError.self,
         "stripe_key_required": StripeKeyRequiredError.self,
+        "credit_credentials_required": CreditCredentialsRequiredError.self,
         "api_key_expired": ApiKeyExpiredError.self,
         "replay": ReplayError.self,
         "live_mode_only": LiveModeOnlyError.self,
@@ -137,12 +157,16 @@ extension APIError {
         "stripe_key_invalid": StripeKeyInvalidError.self,
         "stripe_key_wrong_mode": StripeKeyWrongModeError.self,
         "stripe_key_permission": StripeKeyPermissionError.self,
+        "provider_credentials_invalid": ProviderCredentialsInvalidError.self,
+        "provider_credentials_wrong_mode": ProviderCredentialsWrongModeError.self,
+        "provider_permission": ProviderPermissionError.self,
         "payload_too_large": PayloadTooLargeError.self,
         "connection_paused": ConnectionPausedError.self,
         "rate_limited": RateLimitedError.self,
         "internal_error": InternalServerError.self,
         "atlas_error": AtlasError.self,
         "stripe_unavailable": StripeUnavailableError.self,
+        "provider_unavailable": ProviderUnavailableError.self,
         "sso_provider_error": SsoProviderError.self,
         "sso_not_configured": SsoNotConfiguredError.self,
     ]

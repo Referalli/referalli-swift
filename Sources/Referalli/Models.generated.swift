@@ -1307,6 +1307,8 @@ public struct BillingConnection: Codable, Sendable, Equatable {
     public var customerRefMetadataKey: String?
     /// The Stripe webhook endpoint (`we_…`) Referalli registered for this connection with `stripeKey`.
     public var stripeWebhookEndpointId: String?
+    /// The provider webhooks Referalli registered with `autoRegister` (one per topic for Shopify, BigCommerce, WooCommerce; Stripe's endpoint too). null when set up by hand.
+    public var providerWebhookIds: [String]?
     public var rotation: BillingConnectionRotation
 
     enum CodingKeys: String, CodingKey {
@@ -1323,10 +1325,11 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
         case stripeWebhookEndpointId = "stripeWebhookEndpointId"
+        case providerWebhookIds = "providerWebhookIds"
         case rotation = "rotation"
     }
 
-    public init(id: String, provider: String, name: String, status: String, programIds: [String]? = nil, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, stripeWebhookEndpointId: String? = nil, rotation: BillingConnectionRotation) {
+    public init(id: String, provider: String, name: String, status: String, programIds: [String]? = nil, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, stripeWebhookEndpointId: String? = nil, providerWebhookIds: [String]? = nil, rotation: BillingConnectionRotation) {
         self.id = id
         self.provider = provider
         self.name = name
@@ -1340,6 +1343,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
         self.stripeWebhookEndpointId = stripeWebhookEndpointId
+        self.providerWebhookIds = providerWebhookIds
         self.rotation = rotation
     }
 }
@@ -1360,7 +1364,11 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
     public var programIds: [String]?
     /// With `stripeKey`: the Stripe webhook endpoint (`we_…`) registered or reused.
     public var stripeWebhookEndpointId: String?
-    /// With `stripeKey`: true when an endpoint on the account already pointed at one of your Stripe connections, which is returned instead of a new one.
+    /// With `autoRegister` (not Stripe): the provider webhooks registered or reused.
+    public var providerWebhookIds: [String]?
+    /// With `autoRegister`: optional events the credentials could not subscribe (Shopify `DISPUTES_CREATE` without the `read_shopify_payments_disputes` scope); everything else was registered.
+    public var skippedEvents: [String]?
+    /// With `stripeKey` or `autoRegister`: true when webhooks on the account already pointed at one of your connections for this provider, which is returned instead of a new one.
     public var reused: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -1373,10 +1381,12 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
         case customerRefMetadataKey = "customerRefMetadataKey"
         case programIds = "programIds"
         case stripeWebhookEndpointId = "stripeWebhookEndpointId"
+        case providerWebhookIds = "providerWebhookIds"
+        case skippedEvents = "skippedEvents"
         case reused = "reused"
     }
 
-    public init(id: String, provider: String, status: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, stripeWebhookEndpointId: String? = nil, reused: Bool? = nil) {
+    public init(id: String, provider: String, status: String, webhookSecret: String, webhookUrl: String, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, stripeWebhookEndpointId: String? = nil, providerWebhookIds: [String]? = nil, skippedEvents: [String]? = nil, reused: Bool? = nil) {
         self.id = id
         self.provider = provider
         self.status = status
@@ -1386,6 +1396,8 @@ public struct CreatedBillingConnection: Codable, Sendable, Equatable {
         self.customerRefMetadataKey = customerRefMetadataKey
         self.programIds = programIds
         self.stripeWebhookEndpointId = stripeWebhookEndpointId
+        self.providerWebhookIds = providerWebhookIds
+        self.skippedEvents = skippedEvents
         self.reused = reused
     }
 }
@@ -1408,7 +1420,7 @@ public struct BillingEvent: Codable, Sendable, Equatable {
     public var productRef: String
     /// ignored_by_filter: recorded, never processed (product filter or internal customer).
     public var status: String
-    /// Why it earned nothing. no_referral_in_scope (status processed): the customer is referred only in programs outside the connection's programIds.
+    /// Why it earned nothing. no_referral_in_scope (status processed): the customer is referred only in programs outside the connection's programIds. identity_unresolved / identity_ambiguous (status processed): the customer had no customerRef and an auth connection with resolveBillingCustomers matched no user, or several.
     public var ignoredReason: String?
     /// The productIds, priceIds and skus the event named.
     public var catalog: [String: [String]]?
@@ -2399,6 +2411,102 @@ public struct ApiKey: Codable, Sendable, Equatable {
     }
 }
 
+public struct TokenVerificationValueOption1Claims: Codable, Sendable, Equatable {
+    public var customerRef: String?
+    public var email: String?
+    public var emailVerified: String?
+    public var name: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case email = "email"
+        case emailVerified = "emailVerified"
+        case name = "name"
+    }
+
+    public init(customerRef: String? = nil, email: String? = nil, emailVerified: String? = nil, name: String? = nil) {
+        self.customerRef = customerRef
+        self.email = email
+        self.emailVerified = emailVerified
+        self.name = name
+    }
+}
+
+public struct TokenVerificationValueOption1: Codable, Sendable, Equatable {
+    public var preset: String?
+    public var tenant: String?
+    public var issuer: String
+    /// hs256: verified with the sealed shared secret, which is never returned.
+    public var keyType: String
+    public var jwksUrl: String?
+    /// Checked when set; with none, the token audience is not checked.
+    public var audience: String?
+    public var maxAgeS: Int?
+    public var claims: TokenVerificationValueOption1Claims?
+
+    enum CodingKeys: String, CodingKey {
+        case preset = "preset"
+        case tenant = "tenant"
+        case issuer = "issuer"
+        case keyType = "keyType"
+        case jwksUrl = "jwksUrl"
+        case audience = "audience"
+        case maxAgeS = "maxAgeS"
+        case claims = "claims"
+    }
+
+    public init(preset: String? = nil, tenant: String? = nil, issuer: String, keyType: String, jwksUrl: String? = nil, audience: String? = nil, maxAgeS: Int? = nil, claims: TokenVerificationValueOption1Claims? = nil) {
+        self.preset = preset
+        self.tenant = tenant
+        self.issuer = issuer
+        self.keyType = keyType
+        self.jwksUrl = jwksUrl
+        self.audience = audience
+        self.maxAgeS = maxAgeS
+        self.claims = claims
+    }
+}
+
+/// How POST /v1/widget/session verifies the end user's session JWT; null when not set.
+public typealias TokenVerification = TokenVerificationValueOption1?
+
+public struct WidgetSessionPartner: Codable, Sendable, Equatable {
+    public var id: String
+    public var code: String?
+    /// Their tracked link; null when they have only a coupon.
+    public var linkUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case code = "code"
+        case linkUrl = "linkUrl"
+    }
+
+    public init(id: String, code: String? = nil, linkUrl: String? = nil) {
+        self.id = id
+        self.code = code
+        self.linkUrl = linkUrl
+    }
+}
+
+public struct WidgetSession: Codable, Sendable, Equatable {
+    public var token: String
+    public var expiresAt: String
+    public var partner: WidgetSessionPartner
+
+    enum CodingKeys: String, CodingKey {
+        case token = "token"
+        case expiresAt = "expiresAt"
+        case partner = "partner"
+    }
+
+    public init(token: String, expiresAt: String, partner: WidgetSessionPartner) {
+        self.token = token
+        self.expiresAt = expiresAt
+        self.partner = partner
+    }
+}
+
 public struct AuthConnectionRotation: Codable, Sendable, Equatable {
     public var inProgress: Bool
     public var previousSecretExpiresAt: String?
@@ -2428,9 +2536,14 @@ public struct AuthConnection: Codable, Sendable, Equatable {
     public var appId: String?
     public var autoEnrollUsers: Bool?
     public var destinationUrl: String?
+    /// Billing customers that arrive with no customerRef are resolved through this connection's users (a user-id metadata key, else exactly one verified email).
+    public var resolveBillingCustomers: Bool?
     public var signatureVersion: String?
     /// True once signatureVersion is v2 or the connection has seen a v2 call.
     public var requiresV2: Bool?
+    public var tokenVerification: TokenVerification?
+    /// Browser origins allowed to call POST /v1/widget/session.
+    public var allowedOrigins: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -2444,11 +2557,14 @@ public struct AuthConnection: Codable, Sendable, Equatable {
         case appId = "appId"
         case autoEnrollUsers = "autoEnrollUsers"
         case destinationUrl = "destinationUrl"
+        case resolveBillingCustomers = "resolveBillingCustomers"
         case signatureVersion = "signatureVersion"
         case requiresV2 = "requiresV2"
+        case tokenVerification = "tokenVerification"
+        case allowedOrigins = "allowedOrigins"
     }
 
-    public init(id: String, provider: String, programId: String, name: String, status: String, createdAt: String, rotation: AuthConnectionRotation, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil) {
+    public init(id: String, provider: String, programId: String, name: String, status: String, createdAt: String, rotation: AuthConnectionRotation, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, resolveBillingCustomers: Bool? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
         self.id = id
         self.provider = provider
         self.programId = programId
@@ -2460,8 +2576,11 @@ public struct AuthConnection: Codable, Sendable, Equatable {
         self.appId = appId
         self.autoEnrollUsers = autoEnrollUsers
         self.destinationUrl = destinationUrl
+        self.resolveBillingCustomers = resolveBillingCustomers
         self.signatureVersion = signatureVersion
         self.requiresV2 = requiresV2
+        self.tokenVerification = tokenVerification
+        self.allowedOrigins = allowedOrigins
     }
 }
 
@@ -2484,6 +2603,9 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
     public var signupsUrl: String?
     public var eraseUrl: String?
     public var exportUrl: String?
+    public var tokenVerification: TokenVerification?
+    /// Browser origins allowed to call POST /v1/widget/session.
+    public var allowedOrigins: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -2500,9 +2622,11 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case signupsUrl = "signupsUrl"
         case eraseUrl = "eraseUrl"
         case exportUrl = "exportUrl"
+        case tokenVerification = "tokenVerification"
+        case allowedOrigins = "allowedOrigins"
     }
 
-    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil) {
+    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
         self.id = id
         self.provider = provider
         self.secret = secret
@@ -2517,6 +2641,8 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         self.signupsUrl = signupsUrl
         self.eraseUrl = eraseUrl
         self.exportUrl = exportUrl
+        self.tokenVerification = tokenVerification
+        self.allowedOrigins = allowedOrigins
     }
 }
 
@@ -6456,6 +6582,333 @@ public struct StripeCreditFailedEvent: Codable, Sendable, Equatable {
     }
 }
 
+/// `data` of a `account_credit.applied` event: The account-credit rail credited a referrer (or a referee's store-credit reward) on their customer account in your billing system, with your credentials: a Stripe customer balance transaction or a Chargebee promotional credit. Sent for every provider; Stripe rows also send `stripe_credit.applied`. `transactionId` is the provider's record.
+public struct AccountCreditAppliedEventData: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    /// The commission's currency.
+    public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
+    public var status: String
+    public var attempts: Int
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+    /// The billing provider credited: `stripe` or `chargebee`.
+    public var provider: String
+    /// The billing connection whose credentials were used; null for Stripe on its own key path.
+    public var connectionId: String?
+    /// The provider's customer id (Stripe `cus_…`, Chargebee customer id).
+    public var customerId: String?
+    /// The provider's record of the credit or debit once applied (Stripe balance transaction, Chargebee promotional credit).
+    public var transactionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
+        case status = "status"
+        case attempts = "attempts"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+        case provider = "provider"
+        case connectionId = "connectionId"
+        case customerId = "customerId"
+        case transactionId = "transactionId"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, status: String, attempts: Int, lastError: String? = nil, createdAt: String, updatedAt: String, provider: String, connectionId: String? = nil, customerId: String? = nil, transactionId: String? = nil) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
+        self.status = status
+        self.attempts = attempts
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.provider = provider
+        self.connectionId = connectionId
+        self.customerId = customerId
+        self.transactionId = transactionId
+    }
+}
+
+/// An account credit was applied in your billing system: the `account_credit.applied` delivery body.
+public struct AccountCreditAppliedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: AccountCreditAppliedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: AccountCreditAppliedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `account_credit.reversed` event: The account-credit rail debited back (part of) an applied credit after `commission.reversed`, in the credit's currency and at its rate. Stripe rows also send `stripe_credit.applied`.
+public struct AccountCreditReversedEventData: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    /// The commission's currency.
+    public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
+    public var status: String
+    public var attempts: Int
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+    /// The billing provider credited: `stripe` or `chargebee`.
+    public var provider: String
+    /// The billing connection whose credentials were used; null for Stripe on its own key path.
+    public var connectionId: String?
+    /// The provider's customer id (Stripe `cus_…`, Chargebee customer id).
+    public var customerId: String?
+    /// The provider's record of the credit or debit once applied (Stripe balance transaction, Chargebee promotional credit).
+    public var transactionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
+        case status = "status"
+        case attempts = "attempts"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+        case provider = "provider"
+        case connectionId = "connectionId"
+        case customerId = "customerId"
+        case transactionId = "transactionId"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, status: String, attempts: Int, lastError: String? = nil, createdAt: String, updatedAt: String, provider: String, connectionId: String? = nil, customerId: String? = nil, transactionId: String? = nil) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
+        self.status = status
+        self.attempts = attempts
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.provider = provider
+        self.connectionId = connectionId
+        self.customerId = customerId
+        self.transactionId = transactionId
+    }
+}
+
+/// An account credit was debited back after a reversal: the `account_credit.reversed` delivery body.
+public struct AccountCreditReversedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: AccountCreditReversedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: AccountCreditReversedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `account_credit.failed` event: The account-credit rail stopped retrying a credit or debit after its last attempt: no customer matched (`no_customer`), several did (`ambiguous_customer`), no FX rate converts to the balance currency (`fx_rate_missing`) or the provider refused it (`failed`). `POST /v1/programs/{id}/credit-rail/requeue` gives the first three another round. Stripe rows also send `stripe_credit.failed`.
+public struct AccountCreditFailedEventData: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    /// The commission's currency.
+    public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
+    public var status: String
+    public var attempts: Int
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+    /// The billing provider credited: `stripe` or `chargebee`.
+    public var provider: String
+    /// The billing connection whose credentials were used; null for Stripe on its own key path.
+    public var connectionId: String?
+    /// The provider's customer id (Stripe `cus_…`, Chargebee customer id).
+    public var customerId: String?
+    /// The provider's record of the credit or debit once applied (Stripe balance transaction, Chargebee promotional credit).
+    public var transactionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
+        case status = "status"
+        case attempts = "attempts"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+        case provider = "provider"
+        case connectionId = "connectionId"
+        case customerId = "customerId"
+        case transactionId = "transactionId"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, status: String, attempts: Int, lastError: String? = nil, createdAt: String, updatedAt: String, provider: String, connectionId: String? = nil, customerId: String? = nil, transactionId: String? = nil) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
+        self.status = status
+        self.attempts = attempts
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.provider = provider
+        self.connectionId = connectionId
+        self.customerId = customerId
+        self.transactionId = transactionId
+    }
+}
+
+/// An account credit or debit gave up: the `account_credit.failed` delivery body.
+public struct AccountCreditFailedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: AccountCreditFailedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: AccountCreditFailedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
 /// `data` of a `webhook_endpoint.recovered` event: Sent to your active endpoints, including the recovered one, when a delivery succeeds after the endpoint was failing.
 public struct WebhookEndpointRecoveredEventData: Codable, Sendable, Equatable {
     public var endpointId: String
@@ -9407,6 +9860,22 @@ public struct PostBillingConnectionsIdRotateSecretResponse: Codable, Sendable, E
     }
 }
 
+public struct DeleteBillingConnectionsIdResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    /// Whether the provider webhooks registered with `autoRegister` were removed (only where credentials were kept: BigCommerce). Best effort.
+    public var providerWebhookRemoved: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case providerWebhookRemoved = "providerWebhookRemoved"
+    }
+
+    public init(ok: Bool, providerWebhookRemoved: Bool) {
+        self.ok = ok
+        self.providerWebhookRemoved = providerWebhookRemoved
+    }
+}
+
 public struct GetBillingEventsResponse: Codable, Sendable, Equatable {
     public var object: String
     public var data: [BillingEvent]
@@ -11754,35 +12223,43 @@ public struct PostSandboxSimulateResponse: Codable, Sendable, Equatable {
     }
 }
 
-public struct GetSandboxStripeFixturesResponseDataItem: Codable, Sendable, Equatable {
+public struct GetSandboxBillingFixturesResponseDataItem: Codable, Sendable, Equatable {
+    public var provider: String
+    /// Provider-neutral name, e.g. `payment.paid`.
     public var event: String
+    /// The provider's own event name (also accepted as `event`).
+    public var native: String
     /// The `overrides` fields this fixture uses.
     public var overrides: [String]
 
     enum CodingKeys: String, CodingKey {
+        case provider = "provider"
         case event = "event"
+        case native = "native"
         case overrides = "overrides"
     }
 
-    public init(event: String, overrides: [String]) {
+    public init(provider: String, event: String, native: String, overrides: [String]) {
+        self.provider = provider
         self.event = event
+        self.native = native
         self.overrides = overrides
     }
 }
 
-public struct GetSandboxStripeFixturesResponse: Codable, Sendable, Equatable {
-    public var data: [GetSandboxStripeFixturesResponseDataItem]
+public struct GetSandboxBillingFixturesResponse: Codable, Sendable, Equatable {
+    public var data: [GetSandboxBillingFixturesResponseDataItem]
 
     enum CodingKeys: String, CodingKey {
         case data = "data"
     }
 
-    public init(data: [GetSandboxStripeFixturesResponseDataItem]) {
+    public init(data: [GetSandboxBillingFixturesResponseDataItem]) {
         self.data = data
     }
 }
 
-public struct PostSandboxStripeFixturesResponseResultsItem: Codable, Sendable, Equatable {
+public struct PostSandboxBillingFixturesResponseResultsItem: Codable, Sendable, Equatable {
     public var duplicate: Bool
     public var billingEventId: String?
     public var conversions: Int
@@ -11809,7 +12286,7 @@ public struct PostSandboxStripeFixturesResponseResultsItem: Codable, Sendable, E
     }
 }
 
-public struct PostSandboxStripeFixturesResponseCommissionsItem: Codable, Sendable, Equatable {
+public struct PostSandboxBillingFixturesResponseCommissionsItem: Codable, Sendable, Equatable {
     public var id: String
     public var type: String
     public var partnerId: String
@@ -11836,34 +12313,69 @@ public struct PostSandboxStripeFixturesResponseCommissionsItem: Codable, Sendabl
     }
 }
 
-public struct PostSandboxStripeFixturesResponse: Codable, Sendable, Equatable {
-    /// The Stripe event id sent (`evt_fixture_…`, or your `eventId`).
+public struct PostSandboxBillingFixturesResponse: Codable, Sendable, Equatable {
+    /// The event id the connector dedupes on (`evt_fixture_…`, your `eventId`, or derived from the object, e.g. `shopify_order_…`).
     public var eventId: String
     public var event: String
+    public var provider: String
+    /// The provider's own event name.
+    public var nativeEvent: String
     /// Billing events the connector parsed from the fixture.
     public var received: Int
-    public var results: [PostSandboxStripeFixturesResponseResultsItem]
+    public var results: [PostSandboxBillingFixturesResponseResultsItem]
     /// Commission events the fixture created (earned, reversed…).
-    public var commissions: [PostSandboxStripeFixturesResponseCommissionsItem]
-    /// The Stripe event that was processed.
+    public var commissions: [PostSandboxBillingFixturesResponseCommissionsItem]
+    /// The provider payload that was processed (Recurly and BigCommerce: the enriched payload).
     public var payload: GetOpenapiJsonResponse
 
     enum CodingKeys: String, CodingKey {
         case eventId = "eventId"
         case event = "event"
+        case provider = "provider"
+        case nativeEvent = "nativeEvent"
         case received = "received"
         case results = "results"
         case commissions = "commissions"
         case payload = "payload"
     }
 
-    public init(eventId: String, event: String, received: Int, results: [PostSandboxStripeFixturesResponseResultsItem], commissions: [PostSandboxStripeFixturesResponseCommissionsItem], payload: GetOpenapiJsonResponse) {
+    public init(eventId: String, event: String, provider: String, nativeEvent: String, received: Int, results: [PostSandboxBillingFixturesResponseResultsItem], commissions: [PostSandboxBillingFixturesResponseCommissionsItem], payload: GetOpenapiJsonResponse) {
         self.eventId = eventId
         self.event = event
+        self.provider = provider
+        self.nativeEvent = nativeEvent
         self.received = received
         self.results = results
         self.commissions = commissions
         self.payload = payload
+    }
+}
+
+public struct GetSandboxStripeFixturesResponseDataItem: Codable, Sendable, Equatable {
+    public var event: String
+    /// The `overrides` fields this fixture uses.
+    public var overrides: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case event = "event"
+        case overrides = "overrides"
+    }
+
+    public init(event: String, overrides: [String]) {
+        self.event = event
+        self.overrides = overrides
+    }
+}
+
+public struct GetSandboxStripeFixturesResponse: Codable, Sendable, Equatable {
+    public var data: [GetSandboxStripeFixturesResponseDataItem]
+
+    enum CodingKeys: String, CodingKey {
+        case data = "data"
+    }
+
+    public init(data: [GetSandboxStripeFixturesResponseDataItem]) {
+        self.data = data
     }
 }
 
@@ -15560,8 +16072,12 @@ public struct PatchAuthConnectionsIdResponse: Codable, Sendable, Equatable {
     public var status: String
     public var autoEnrollUsers: Bool?
     public var destinationUrl: String?
+    public var resolveBillingCustomers: Bool?
     public var signatureVersion: String?
     public var requiresV2: Bool?
+    public var tokenVerification: TokenVerification?
+    /// Browser origins allowed to call POST /v1/widget/session.
+    public var allowedOrigins: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id = "id"
@@ -15570,19 +16086,25 @@ public struct PatchAuthConnectionsIdResponse: Codable, Sendable, Equatable {
         case status = "status"
         case autoEnrollUsers = "autoEnrollUsers"
         case destinationUrl = "destinationUrl"
+        case resolveBillingCustomers = "resolveBillingCustomers"
         case signatureVersion = "signatureVersion"
         case requiresV2 = "requiresV2"
+        case tokenVerification = "tokenVerification"
+        case allowedOrigins = "allowedOrigins"
     }
 
-    public init(id: String, provider: String, name: String, status: String, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil) {
+    public init(id: String, provider: String, name: String, status: String, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, resolveBillingCustomers: Bool? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
         self.id = id
         self.provider = provider
         self.name = name
         self.status = status
         self.autoEnrollUsers = autoEnrollUsers
         self.destinationUrl = destinationUrl
+        self.resolveBillingCustomers = resolveBillingCustomers
         self.signatureVersion = signatureVersion
         self.requiresV2 = requiresV2
+        self.tokenVerification = tokenVerification
+        self.allowedOrigins = allowedOrigins
     }
 }
 
@@ -15932,6 +16454,27 @@ public struct PostAuthConnectionsIdUsersResponse: Codable, Sendable, Equatable {
         self.partner = partner
         self.updated = updated
         self.notes = notes
+    }
+}
+
+public struct GetAuthConnectionsIdUsersCustomerRefReferralResponse: Codable, Sendable, Equatable {
+    public var partnerId: String
+    public var code: String?
+    public var linkUrl: String?
+    public var enrolledAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case partnerId = "partnerId"
+        case code = "code"
+        case linkUrl = "linkUrl"
+        case enrolledAt = "enrolledAt"
+    }
+
+    public init(partnerId: String, code: String? = nil, linkUrl: String? = nil, enrolledAt: String) {
+        self.partnerId = partnerId
+        self.code = code
+        self.linkUrl = linkUrl
+        self.enrolledAt = enrolledAt
     }
 }
 
@@ -21975,6 +22518,196 @@ public struct GetProgramsIdStripeCreditsLogResponse: Codable, Sendable, Equatabl
     }
 }
 
+public struct GetProgramsIdCreditRailResponseCreateCustomerIfMissingOption1: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+    }
+
+    public init(metadata: [String: String]? = nil) {
+        self.metadata = metadata
+    }
+}
+
+public struct GetProgramsIdCreditRailResponseCapabilities: Codable, Sendable, Equatable {
+    /// The provider reports a customer balance currency; without it credits go in the commission's currency (or balanceCurrency).
+    public var customerCurrency: Bool
+    /// createCustomerIfMissing is available.
+    public var createCustomer: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case customerCurrency = "customerCurrency"
+        case createCustomer = "createCustomer"
+    }
+
+    public init(customerCurrency: Bool, createCustomer: Bool) {
+        self.customerCurrency = customerCurrency
+        self.createCustomer = createCustomer
+    }
+}
+
+public struct GetProgramsIdCreditRailResponse: Codable, Sendable, Equatable {
+    public var programId: String
+    /// The billing provider credits go to: the connection's provider, or `stripe` with no connection.
+    public var provider: String
+    public var connectionId: String?
+    public var enabled: Bool
+    public var referrerMatch: String
+    public var metadataKey: String?
+    public var refereeRewards: Bool
+    public var balanceCurrency: String?
+    public var createCustomerIfMissing: GetProgramsIdCreditRailResponseCreateCustomerIfMissingOption1?
+    public var waitForCustomer: Bool
+    /// Whether credentials are available: the connection's stored API credentials, or for Stripe its key path.
+    public var credentialsConnected: Bool
+    public var capabilities: GetProgramsIdCreditRailResponseCapabilities
+
+    enum CodingKeys: String, CodingKey {
+        case programId = "programId"
+        case provider = "provider"
+        case connectionId = "connectionId"
+        case enabled = "enabled"
+        case referrerMatch = "referrerMatch"
+        case metadataKey = "metadataKey"
+        case refereeRewards = "refereeRewards"
+        case balanceCurrency = "balanceCurrency"
+        case createCustomerIfMissing = "createCustomerIfMissing"
+        case waitForCustomer = "waitForCustomer"
+        case credentialsConnected = "credentialsConnected"
+        case capabilities = "capabilities"
+    }
+
+    public init(programId: String, provider: String, connectionId: String? = nil, enabled: Bool, referrerMatch: String, metadataKey: String? = nil, refereeRewards: Bool, balanceCurrency: String? = nil, createCustomerIfMissing: GetProgramsIdCreditRailResponseCreateCustomerIfMissingOption1? = nil, waitForCustomer: Bool, credentialsConnected: Bool, capabilities: GetProgramsIdCreditRailResponseCapabilities) {
+        self.programId = programId
+        self.provider = provider
+        self.connectionId = connectionId
+        self.enabled = enabled
+        self.referrerMatch = referrerMatch
+        self.metadataKey = metadataKey
+        self.refereeRewards = refereeRewards
+        self.balanceCurrency = balanceCurrency
+        self.createCustomerIfMissing = createCustomerIfMissing
+        self.waitForCustomer = waitForCustomer
+        self.credentialsConnected = credentialsConnected
+        self.capabilities = capabilities
+    }
+}
+
+public struct PostProgramsIdCreditRailRequeueResponse: Codable, Sendable, Equatable {
+    public var requeued: Int
+    public var creditIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case requeued = "requeued"
+        case creditIds = "creditIds"
+    }
+
+    public init(requeued: Int, creditIds: [String]) {
+        self.requeued = requeued
+        self.creditIds = creditIds
+    }
+}
+
+public struct GetProgramsIdCreditRailLogResponseDataItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var programId: String
+    /// The settled commission line, the reversal, or the referee reward this applies.
+    public var sourceEventId: String
+    public var kind: String
+    public var commissionId: String?
+    public var partnerId: String?
+    public var customerRef: String?
+    /// Positive, integer minor units. Credits are sent to Stripe as a negative amount, debits as positive.
+    public var amountMinor: Int
+    /// The commission's currency.
+    public var currency: String
+    /// What was (or will be) sent to Stripe, in appliedCurrency: amountMinor converted at your FX rate when the balance currency differs. A debit uses its credit's currency and rate.
+    public var appliedAmountMinor: Int?
+    /// The Stripe customer balance currency the row is applied in.
+    public var appliedCurrency: String?
+    public var status: String
+    public var attempts: Int
+    public var lastError: String?
+    public var createdAt: String
+    public var updatedAt: String
+    /// The billing provider credited: `stripe` or `chargebee`.
+    public var provider: String
+    /// The billing connection whose credentials were used; null for Stripe on its own key path.
+    public var connectionId: String?
+    /// The provider's customer id (Stripe `cus_…`, Chargebee customer id).
+    public var customerId: String?
+    /// The provider's record of the credit or debit once applied (Stripe balance transaction, Chargebee promotional credit).
+    public var transactionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case programId = "programId"
+        case sourceEventId = "sourceEventId"
+        case kind = "kind"
+        case commissionId = "commissionId"
+        case partnerId = "partnerId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case appliedAmountMinor = "appliedAmountMinor"
+        case appliedCurrency = "appliedCurrency"
+        case status = "status"
+        case attempts = "attempts"
+        case lastError = "lastError"
+        case createdAt = "createdAt"
+        case updatedAt = "updatedAt"
+        case provider = "provider"
+        case connectionId = "connectionId"
+        case customerId = "customerId"
+        case transactionId = "transactionId"
+    }
+
+    public init(id: String, programId: String, sourceEventId: String, kind: String, commissionId: String? = nil, partnerId: String? = nil, customerRef: String? = nil, amountMinor: Int, currency: String, appliedAmountMinor: Int? = nil, appliedCurrency: String? = nil, status: String, attempts: Int, lastError: String? = nil, createdAt: String, updatedAt: String, provider: String, connectionId: String? = nil, customerId: String? = nil, transactionId: String? = nil) {
+        self.id = id
+        self.programId = programId
+        self.sourceEventId = sourceEventId
+        self.kind = kind
+        self.commissionId = commissionId
+        self.partnerId = partnerId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.appliedAmountMinor = appliedAmountMinor
+        self.appliedCurrency = appliedCurrency
+        self.status = status
+        self.attempts = attempts
+        self.lastError = lastError
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.provider = provider
+        self.connectionId = connectionId
+        self.customerId = customerId
+        self.transactionId = transactionId
+    }
+}
+
+public struct GetProgramsIdCreditRailLogResponse: Codable, Sendable, Equatable {
+    public var object: String
+    public var data: [GetProgramsIdCreditRailLogResponseDataItem]
+    public var hasMore: Bool
+    public var nextCursor: String?
+
+    enum CodingKeys: String, CodingKey {
+        case object = "object"
+        case data = "data"
+        case hasMore = "has_more"
+        case nextCursor = "next_cursor"
+    }
+
+    public init(object: String, data: [GetProgramsIdCreditRailLogResponseDataItem], hasMore: Bool, nextCursor: String? = nil) {
+        self.object = object
+        self.data = data
+        self.hasMore = hasMore
+        self.nextCursor = nextCursor
+    }
+}
+
 public struct PostWebhooksBillingConnectionIdResponseResultsItem: Codable, Sendable, Equatable {
     public var duplicate: Bool
     public var billingEventId: String?
@@ -23877,6 +24610,18 @@ public struct PostWidgetTokensBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostWidgetSessionBody: Codable, Sendable, Equatable {
+    public var programId: String
+
+    enum CodingKeys: String, CodingKey {
+        case programId = "programId"
+    }
+
+    public init(programId: String) {
+        self.programId = programId
+    }
+}
+
 public struct PostReferralsAssociateBodyConsent: Codable, Sendable, Equatable {
     /// The adapter that read it (`onetrust`, `tcf`, `cookiemunch`, …), `custom` for `aff.consent()`, `none`, or `no-cmp`.
     public var provider: String
@@ -24513,6 +25258,8 @@ public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
     public var programIds: [String]?
     public var stripeKey: String?
     public var creditRail: PostBillingConnectionsBodyCreditRail?
+    public var autoRegister: Bool?
+    public var credentials: [String: JSONValue]?
 
     enum CodingKeys: String, CodingKey {
         case provider = "provider"
@@ -24523,9 +25270,11 @@ public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
         case programIds = "programIds"
         case stripeKey = "stripeKey"
         case creditRail = "creditRail"
+        case autoRegister = "autoRegister"
+        case credentials = "credentials"
     }
 
-    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, stripeKey: String? = nil, creditRail: PostBillingConnectionsBodyCreditRail? = nil) {
+    public init(provider: String, name: String? = nil, webhookSecret: String? = nil, filter: PostBillingConnectionsBodyFilter? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, stripeKey: String? = nil, creditRail: PostBillingConnectionsBodyCreditRail? = nil, autoRegister: Bool? = nil, credentials: [String: JSONValue]? = nil) {
         self.provider = provider
         self.name = name
         self.webhookSecret = webhookSecret
@@ -24534,6 +25283,8 @@ public struct PostBillingConnectionsBody: Codable, Sendable, Equatable {
         self.programIds = programIds
         self.stripeKey = stripeKey
         self.creditRail = creditRail
+        self.autoRegister = autoRegister
+        self.credentials = credentials
     }
 }
 
@@ -24554,19 +25305,22 @@ public struct PutBillingConnectionsIdCredentialsBody: Codable, Sendable, Equatab
     public var apiToken: String?
     public var storeHash: String?
     public var region: String?
+    public var site: String?
 
     enum CodingKeys: String, CodingKey {
         case apiKey = "apiKey"
         case apiToken = "apiToken"
         case storeHash = "storeHash"
         case region = "region"
+        case site = "site"
     }
 
-    public init(apiKey: String? = nil, apiToken: String? = nil, storeHash: String? = nil, region: String? = nil) {
+    public init(apiKey: String? = nil, apiToken: String? = nil, storeHash: String? = nil, region: String? = nil, site: String? = nil) {
         self.apiKey = apiKey
         self.apiToken = apiToken
         self.storeHash = storeHash
         self.region = region
+        self.site = site
     }
 }
 
@@ -25366,13 +26120,15 @@ public struct PostSandboxSimulateBody: Codable, Sendable, Equatable {
     }
 }
 
-public struct PostSandboxStripeFixturesBodyOverrides: Codable, Sendable, Equatable {
+public struct PostSandboxBillingFixturesBodyOverrides: Codable, Sendable, Equatable {
     public var customerRef: String?
     public var amountMinor: Int?
     public var currency: String?
     public var metadata: [String: String]?
     public var invoiceId: String?
+    public var orderId: String?
     public var chargeId: String?
+    public var subscriptionId: String?
 
     enum CodingKeys: String, CodingKey {
         case customerRef = "customerRef"
@@ -25380,37 +26136,95 @@ public struct PostSandboxStripeFixturesBodyOverrides: Codable, Sendable, Equatab
         case currency = "currency"
         case metadata = "metadata"
         case invoiceId = "invoiceId"
+        case orderId = "orderId"
         case chargeId = "chargeId"
+        case subscriptionId = "subscriptionId"
     }
 
-    public init(customerRef: String? = nil, amountMinor: Int? = nil, currency: String? = nil, metadata: [String: String]? = nil, invoiceId: String? = nil, chargeId: String? = nil) {
+    public init(customerRef: String? = nil, amountMinor: Int? = nil, currency: String? = nil, metadata: [String: String]? = nil, invoiceId: String? = nil, orderId: String? = nil, chargeId: String? = nil, subscriptionId: String? = nil) {
         self.customerRef = customerRef
         self.amountMinor = amountMinor
         self.currency = currency
         self.metadata = metadata
         self.invoiceId = invoiceId
+        self.orderId = orderId
         self.chargeId = chargeId
+        self.subscriptionId = subscriptionId
+    }
+}
+
+public struct PostSandboxBillingFixturesBody: Codable, Sendable, Equatable {
+    public var connectionId: String
+    public var eventId: String?
+    public var overrides: PostSandboxBillingFixturesBodyOverrides?
+    public var event: String
+
+    enum CodingKeys: String, CodingKey {
+        case connectionId = "connectionId"
+        case eventId = "eventId"
+        case overrides = "overrides"
+        case event = "event"
+    }
+
+    public init(connectionId: String, eventId: String? = nil, overrides: PostSandboxBillingFixturesBodyOverrides? = nil, event: String) {
+        self.connectionId = connectionId
+        self.eventId = eventId
+        self.overrides = overrides
+        self.event = event
+    }
+}
+
+public struct PostSandboxStripeFixturesBodyOverrides: Codable, Sendable, Equatable {
+    public var customerRef: String?
+    public var amountMinor: Int?
+    public var currency: String?
+    public var metadata: [String: String]?
+    public var invoiceId: String?
+    public var orderId: String?
+    public var chargeId: String?
+    public var subscriptionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case metadata = "metadata"
+        case invoiceId = "invoiceId"
+        case orderId = "orderId"
+        case chargeId = "chargeId"
+        case subscriptionId = "subscriptionId"
+    }
+
+    public init(customerRef: String? = nil, amountMinor: Int? = nil, currency: String? = nil, metadata: [String: String]? = nil, invoiceId: String? = nil, orderId: String? = nil, chargeId: String? = nil, subscriptionId: String? = nil) {
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.metadata = metadata
+        self.invoiceId = invoiceId
+        self.orderId = orderId
+        self.chargeId = chargeId
+        self.subscriptionId = subscriptionId
     }
 }
 
 public struct PostSandboxStripeFixturesBody: Codable, Sendable, Equatable {
     public var connectionId: String
-    public var event: String
     public var eventId: String?
     public var overrides: PostSandboxStripeFixturesBodyOverrides?
+    public var event: String
 
     enum CodingKeys: String, CodingKey {
         case connectionId = "connectionId"
-        case event = "event"
         case eventId = "eventId"
         case overrides = "overrides"
+        case event = "event"
     }
 
-    public init(connectionId: String, event: String, eventId: String? = nil, overrides: PostSandboxStripeFixturesBodyOverrides? = nil) {
+    public init(connectionId: String, eventId: String? = nil, overrides: PostSandboxStripeFixturesBodyOverrides? = nil, event: String) {
         self.connectionId = connectionId
-        self.event = event
         self.eventId = eventId
         self.overrides = overrides
+        self.event = event
     }
 }
 
@@ -26757,6 +27571,63 @@ public struct PostAuthConnectionsBodyKeys: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostAuthConnectionsBodyTokenVerificationClaims: Codable, Sendable, Equatable {
+    public var customerRef: String?
+    public var email: String?
+    public var emailVerified: String?
+    public var name: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case email = "email"
+        case emailVerified = "emailVerified"
+        case name = "name"
+    }
+
+    public init(customerRef: String? = nil, email: String? = nil, emailVerified: String? = nil, name: String? = nil) {
+        self.customerRef = customerRef
+        self.email = email
+        self.emailVerified = emailVerified
+        self.name = name
+    }
+}
+
+public struct PostAuthConnectionsBodyTokenVerification: Codable, Sendable, Equatable {
+    public var preset: String?
+    public var tenant: String?
+    public var issuer: String?
+    public var jwksUrl: String?
+    public var keyType: String?
+    public var sharedSecret: String?
+    public var audience: String?
+    public var maxAgeS: Int?
+    public var claims: PostAuthConnectionsBodyTokenVerificationClaims?
+
+    enum CodingKeys: String, CodingKey {
+        case preset = "preset"
+        case tenant = "tenant"
+        case issuer = "issuer"
+        case jwksUrl = "jwksUrl"
+        case keyType = "keyType"
+        case sharedSecret = "sharedSecret"
+        case audience = "audience"
+        case maxAgeS = "maxAgeS"
+        case claims = "claims"
+    }
+
+    public init(preset: String? = nil, tenant: String? = nil, issuer: String? = nil, jwksUrl: String? = nil, keyType: String? = nil, sharedSecret: String? = nil, audience: String? = nil, maxAgeS: Int? = nil, claims: PostAuthConnectionsBodyTokenVerificationClaims? = nil) {
+        self.preset = preset
+        self.tenant = tenant
+        self.issuer = issuer
+        self.jwksUrl = jwksUrl
+        self.keyType = keyType
+        self.sharedSecret = sharedSecret
+        self.audience = audience
+        self.maxAgeS = maxAgeS
+        self.claims = claims
+    }
+}
+
 public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
     public var provider: String
     public var programId: String
@@ -26767,6 +27638,8 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
     public var name: String?
     public var secret: String?
     public var keys: PostAuthConnectionsBodyKeys?
+    public var tokenVerification: PostAuthConnectionsBodyTokenVerification?
+    public var allowedOrigins: [String]?
 
     enum CodingKeys: String, CodingKey {
         case provider = "provider"
@@ -26778,9 +27651,11 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
         case name = "name"
         case secret = "secret"
         case keys = "keys"
+        case tokenVerification = "tokenVerification"
+        case allowedOrigins = "allowedOrigins"
     }
 
-    public init(provider: String, programId: String, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, name: String? = nil, secret: String? = nil, keys: PostAuthConnectionsBodyKeys? = nil) {
+    public init(provider: String, programId: String, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, name: String? = nil, secret: String? = nil, keys: PostAuthConnectionsBodyKeys? = nil, tokenVerification: PostAuthConnectionsBodyTokenVerification? = nil, allowedOrigins: [String]? = nil) {
         self.provider = provider
         self.programId = programId
         self.instanceId = instanceId
@@ -26790,6 +27665,8 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
         self.name = name
         self.secret = secret
         self.keys = keys
+        self.tokenVerification = tokenVerification
+        self.allowedOrigins = allowedOrigins
     }
 }
 
@@ -26805,27 +27682,93 @@ public struct PutAuthConnectionsIdSecretBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PatchAuthConnectionsIdBodyTokenVerificationOption1Claims: Codable, Sendable, Equatable {
+    public var customerRef: String?
+    public var email: String?
+    public var emailVerified: String?
+    public var name: String?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case email = "email"
+        case emailVerified = "emailVerified"
+        case name = "name"
+    }
+
+    public init(customerRef: String? = nil, email: String? = nil, emailVerified: String? = nil, name: String? = nil) {
+        self.customerRef = customerRef
+        self.email = email
+        self.emailVerified = emailVerified
+        self.name = name
+    }
+}
+
+public struct PatchAuthConnectionsIdBodyTokenVerificationOption1: Codable, Sendable, Equatable {
+    public var preset: String?
+    public var tenant: String?
+    public var issuer: String?
+    public var jwksUrl: String?
+    public var keyType: String?
+    public var sharedSecret: String?
+    public var audience: String?
+    public var maxAgeS: Int?
+    public var claims: PatchAuthConnectionsIdBodyTokenVerificationOption1Claims?
+
+    enum CodingKeys: String, CodingKey {
+        case preset = "preset"
+        case tenant = "tenant"
+        case issuer = "issuer"
+        case jwksUrl = "jwksUrl"
+        case keyType = "keyType"
+        case sharedSecret = "sharedSecret"
+        case audience = "audience"
+        case maxAgeS = "maxAgeS"
+        case claims = "claims"
+    }
+
+    public init(preset: String? = nil, tenant: String? = nil, issuer: String? = nil, jwksUrl: String? = nil, keyType: String? = nil, sharedSecret: String? = nil, audience: String? = nil, maxAgeS: Int? = nil, claims: PatchAuthConnectionsIdBodyTokenVerificationOption1Claims? = nil) {
+        self.preset = preset
+        self.tenant = tenant
+        self.issuer = issuer
+        self.jwksUrl = jwksUrl
+        self.keyType = keyType
+        self.sharedSecret = sharedSecret
+        self.audience = audience
+        self.maxAgeS = maxAgeS
+        self.claims = claims
+    }
+}
+
 public struct PatchAuthConnectionsIdBody: Codable, Sendable, Equatable {
     public var status: String?
     public var name: String?
     public var autoEnrollUsers: Bool?
     public var destinationUrl: String?
+    public var resolveBillingCustomers: Bool?
     public var signatureVersion: String?
+    public var tokenVerification: PatchAuthConnectionsIdBodyTokenVerificationOption1?
+    public var allowedOrigins: [String]?
 
     enum CodingKeys: String, CodingKey {
         case status = "status"
         case name = "name"
         case autoEnrollUsers = "autoEnrollUsers"
         case destinationUrl = "destinationUrl"
+        case resolveBillingCustomers = "resolveBillingCustomers"
         case signatureVersion = "signatureVersion"
+        case tokenVerification = "tokenVerification"
+        case allowedOrigins = "allowedOrigins"
     }
 
-    public init(status: String? = nil, name: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signatureVersion: String? = nil) {
+    public init(status: String? = nil, name: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, resolveBillingCustomers: Bool? = nil, signatureVersion: String? = nil, tokenVerification: PatchAuthConnectionsIdBodyTokenVerificationOption1? = nil, allowedOrigins: [String]? = nil) {
         self.status = status
         self.name = name
         self.autoEnrollUsers = autoEnrollUsers
         self.destinationUrl = destinationUrl
+        self.resolveBillingCustomers = resolveBillingCustomers
         self.signatureVersion = signatureVersion
+        self.tokenVerification = tokenVerification
+        self.allowedOrigins = allowedOrigins
     }
 }
 
@@ -26991,21 +27934,48 @@ public struct PostAuthConnectionsIdAliasesBody: Codable, Sendable, Equatable {
 public struct PostAuthConnectionsIdUsersBody: Codable, Sendable, Equatable {
     public var customerRef: String
     public var email: String?
+    public var emailVerified: Bool?
     public var name: String?
     public var status: String?
 
     enum CodingKeys: String, CodingKey {
         case customerRef = "customerRef"
         case email = "email"
+        case emailVerified = "emailVerified"
         case name = "name"
         case status = "status"
     }
 
-    public init(customerRef: String, email: String? = nil, name: String? = nil, status: String? = nil) {
+    public init(customerRef: String, email: String? = nil, emailVerified: Bool? = nil, name: String? = nil, status: String? = nil) {
         self.customerRef = customerRef
         self.email = email
+        self.emailVerified = emailVerified
         self.name = name
         self.status = status
+    }
+}
+
+public struct PostAuthConnectionsIdWidgetTokensBody: Codable, Sendable, Equatable {
+    public var customerRef: String
+    public var email: String?
+    public var emailVerified: Bool?
+    public var displayName: String?
+    public var ttlSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case customerRef = "customerRef"
+        case email = "email"
+        case emailVerified = "emailVerified"
+        case displayName = "displayName"
+        case ttlSeconds = "ttlSeconds"
+    }
+
+    public init(customerRef: String, email: String? = nil, emailVerified: Bool? = nil, displayName: String? = nil, ttlSeconds: Int? = nil) {
+        self.customerRef = customerRef
+        self.email = email
+        self.emailVerified = emailVerified
+        self.displayName = displayName
+        self.ttlSeconds = ttlSeconds
     }
 }
 
@@ -27679,6 +28649,63 @@ public struct PutProgramsIdStripeCreditsBody: Codable, Sendable, Equatable {
 }
 
 public struct PostProgramsIdStripeCreditsRequeueBody: Codable, Sendable, Equatable {
+    public var creditIds: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case creditIds = "creditIds"
+    }
+
+    public init(creditIds: [String]? = nil) {
+        self.creditIds = creditIds
+    }
+}
+
+public struct PutProgramsIdCreditRailBodyCreateCustomerIfMissingOption1: Codable, Sendable, Equatable {
+    public var metadata: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case metadata = "metadata"
+    }
+
+    public init(metadata: [String: String]? = nil) {
+        self.metadata = metadata
+    }
+}
+
+public struct PutProgramsIdCreditRailBody: Codable, Sendable, Equatable {
+    public var enabled: Bool
+    public var referrerMatch: String?
+    public var metadataKey: String?
+    public var refereeRewards: Bool?
+    public var balanceCurrency: String?
+    public var createCustomerIfMissing: PutProgramsIdCreditRailBodyCreateCustomerIfMissingOption1?
+    public var waitForCustomer: Bool?
+    public var connectionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled = "enabled"
+        case referrerMatch = "referrerMatch"
+        case metadataKey = "metadataKey"
+        case refereeRewards = "refereeRewards"
+        case balanceCurrency = "balanceCurrency"
+        case createCustomerIfMissing = "createCustomerIfMissing"
+        case waitForCustomer = "waitForCustomer"
+        case connectionId = "connectionId"
+    }
+
+    public init(enabled: Bool, referrerMatch: String? = nil, metadataKey: String? = nil, refereeRewards: Bool? = nil, balanceCurrency: String? = nil, createCustomerIfMissing: PutProgramsIdCreditRailBodyCreateCustomerIfMissingOption1? = nil, waitForCustomer: Bool? = nil, connectionId: String? = nil) {
+        self.enabled = enabled
+        self.referrerMatch = referrerMatch
+        self.metadataKey = metadataKey
+        self.refereeRewards = refereeRewards
+        self.balanceCurrency = balanceCurrency
+        self.createCustomerIfMissing = createCustomerIfMissing
+        self.waitForCustomer = waitForCustomer
+        self.connectionId = connectionId
+    }
+}
+
+public struct PostProgramsIdCreditRailRequeueBody: Codable, Sendable, Equatable {
     public var creditIds: [String]?
 
     enum CodingKeys: String, CodingKey {

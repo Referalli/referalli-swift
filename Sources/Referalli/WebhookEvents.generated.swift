@@ -5,6 +5,12 @@ import Foundation
 
 /// Every webhook topic the API publishes.
 public enum WebhookTopic {
+    /// `account_credit.applied`: An account credit was applied in your billing system
+    public static let accountCreditApplied = "account_credit.applied"
+    /// `account_credit.failed`: An account credit or debit gave up
+    public static let accountCreditFailed = "account_credit.failed"
+    /// `account_credit.reversed`: An account credit was debited back after a reversal
+    public static let accountCreditReversed = "account_credit.reversed"
     /// `api_key.expiring`: An API key expires soon
     public static let apiKeyExpiring = "api_key.expiring"
     /// `billing_event.recorded`: A billing event was recorded
@@ -85,11 +91,17 @@ public enum WebhookTopic {
     public static let webhookEndpointRecovered = "webhook_endpoint.recovered"
 
     /// Every topic.
-    public static let all: [String] = ["api_key.expiring", "billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "fx.rates_updated", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
+    public static let all: [String] = ["account_credit.applied", "account_credit.failed", "account_credit.reversed", "api_key.expiring", "billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "fx.rates_updated", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
 }
 
 /// A webhook event's payload, typed by topic. `.unknown` is a topic this SDK predates.
 public enum WebhookPayload: Sendable {
+    /// `account_credit.applied`
+    case accountCreditApplied(AccountCreditAppliedEventData)
+    /// `account_credit.failed`
+    case accountCreditFailed(AccountCreditFailedEventData)
+    /// `account_credit.reversed`
+    case accountCreditReversed(AccountCreditReversedEventData)
     /// `api_key.expiring`
     case apiKeyExpiring(ApiKeyExpiringEventData)
     /// `billing_event.recorded`
@@ -172,6 +184,12 @@ public enum WebhookPayload: Sendable {
 
     static func decode(topic: String, data: JSONValue) throws -> WebhookPayload {
         switch topic {
+        case "account_credit.applied":
+            return .accountCreditApplied(try ReferalliClient.decode(AccountCreditAppliedEventData.self, from: data))
+        case "account_credit.failed":
+            return .accountCreditFailed(try ReferalliClient.decode(AccountCreditFailedEventData.self, from: data))
+        case "account_credit.reversed":
+            return .accountCreditReversed(try ReferalliClient.decode(AccountCreditReversedEventData.self, from: data))
         case "api_key.expiring":
             return .apiKeyExpiring(try ReferalliClient.decode(ApiKeyExpiringEventData.self, from: data))
         case "billing_event.recorded":
