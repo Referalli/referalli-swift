@@ -12,6 +12,9 @@ public final class ModeMismatchError: APIError, @unchecked Sendable {}
 /// `bad_request` (HTTP 400).
 public final class BadRequestError: APIError, @unchecked Sendable {}
 
+/// `invalid_handoff_token` (HTTP 400).
+public final class InvalidHandoffTokenError: APIError, @unchecked Sendable {}
+
 /// `unauthorized` (HTTP 401).
 public final class AuthenticationError: APIError, @unchecked Sendable {}
 
@@ -131,6 +134,7 @@ extension APIError {
         "validation_error": ValidationError.self,
         "mode_mismatch": ModeMismatchError.self,
         "bad_request": BadRequestError.self,
+        "invalid_handoff_token": InvalidHandoffTokenError.self,
         "unauthorized": AuthenticationError.self,
         "step_up_required": StepUpRequiredError.self,
         "reauth_required": ReauthRequiredError.self,

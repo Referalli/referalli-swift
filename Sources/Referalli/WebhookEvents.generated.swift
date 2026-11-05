@@ -13,6 +13,12 @@ public enum WebhookTopic {
     public static let accountCreditReversed = "account_credit.reversed"
     /// `api_key.expiring`: An API key expires soon
     public static let apiKeyExpiring = "api_key.expiring"
+    /// `billing_account.owner_changed`: A billing account's owner changed
+    public static let billingAccountOwnerChanged = "billing_account.owner_changed"
+    /// `billing_event.expired`: A parked refund or dispute expired
+    public static let billingEventExpired = "billing_event.expired"
+    /// `billing_event.held`: A payment was held for review
+    public static let billingEventHeld = "billing_event.held"
     /// `billing_event.recorded`: A billing event was recorded
     public static let billingEventRecorded = "billing_event.recorded"
     /// `click.recorded`: A tracked click was recorded
@@ -91,7 +97,7 @@ public enum WebhookTopic {
     public static let webhookEndpointRecovered = "webhook_endpoint.recovered"
 
     /// Every topic.
-    public static let all: [String] = ["account_credit.applied", "account_credit.failed", "account_credit.reversed", "api_key.expiring", "billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "fx.rates_updated", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
+    public static let all: [String] = ["account_credit.applied", "account_credit.failed", "account_credit.reversed", "api_key.expiring", "billing_account.owner_changed", "billing_event.expired", "billing_event.held", "billing_event.recorded", "click.recorded", "commission.earned", "commission.reversed", "commission.settled", "credit.redeemed", "customer.aliased", "deal.submitted", "dispute.resolved", "fraud.case_opened", "fx.rates_updated", "partner.applied", "partner.approved", "partner.enrolled", "partner.level_up", "payout.cancelled", "payout.failed", "payout.scheduled", "payout.sent", "payout.submitted", "privacy.request_completed", "referee_reward.earned", "referral.approved", "referral.created", "referral.held", "referral.paused", "referral.reassigned", "referral.rejected", "referral.resumed", "referral.voided", "roi.pattern_detected", "roi.payback_reached", "stripe_credit.applied", "stripe_credit.failed", "tax.form_delivered", "webhook_endpoint.disabled", "webhook_endpoint.failing", "webhook_endpoint.recovered"]
 }
 
 /// A webhook event's payload, typed by topic. `.unknown` is a topic this SDK predates.
@@ -104,6 +110,12 @@ public enum WebhookPayload: Sendable {
     case accountCreditReversed(AccountCreditReversedEventData)
     /// `api_key.expiring`
     case apiKeyExpiring(ApiKeyExpiringEventData)
+    /// `billing_account.owner_changed`
+    case billingAccountOwnerChanged(BillingAccountOwnerChangedEventData)
+    /// `billing_event.expired`
+    case billingEventExpired(BillingEventExpiredEventData)
+    /// `billing_event.held`
+    case billingEventHeld(BillingEventHeldEventData)
     /// `billing_event.recorded`
     case billingEventRecorded(BillingEventRecordedEventData)
     /// `click.recorded`
@@ -192,6 +204,12 @@ public enum WebhookPayload: Sendable {
             return .accountCreditReversed(try ReferalliClient.decode(AccountCreditReversedEventData.self, from: data))
         case "api_key.expiring":
             return .apiKeyExpiring(try ReferalliClient.decode(ApiKeyExpiringEventData.self, from: data))
+        case "billing_account.owner_changed":
+            return .billingAccountOwnerChanged(try ReferalliClient.decode(BillingAccountOwnerChangedEventData.self, from: data))
+        case "billing_event.expired":
+            return .billingEventExpired(try ReferalliClient.decode(BillingEventExpiredEventData.self, from: data))
+        case "billing_event.held":
+            return .billingEventHeld(try ReferalliClient.decode(BillingEventHeldEventData.self, from: data))
         case "billing_event.recorded":
             return .billingEventRecorded(try ReferalliClient.decode(BillingEventRecordedEventData.self, from: data))
         case "click.recorded":

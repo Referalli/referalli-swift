@@ -7,11 +7,11 @@ import Foundation
 extension ReferalliClient {
     /// Revoke an API key. DELETE /v1/api-keys/{id}
     ///
-    /// Revokes a key at once. `cascade=true` also revokes every key it minted (and theirs); `pair=true` also revokes its live/test twin. Returns the revoked ids. Needs an owner or admin session, or an API key with the `admin` scope. Audited.
+    /// Revokes a key at once. `cascade=true` also revokes every key it minted (and theirs); `pair=true` also revokes its live/test twin. Returns the revoked ids. Needs an owner or admin session, or an API key with the `admin` scope. A key holding `api_keys:mint` may also do this for keys it minted itself (403 for any other). Audited.
     ///
-    /// **Auth:** an API key with `team:write`, or a session of any role.
+    /// **Auth:** an API key with `api_keys:mint`, or a session of any role.
     ///
-    /// **Scopes:** `team:write`, `full`, `admin`.
+    /// **Scopes:** `api_keys:mint`, `admin`.
     ///
     /// cascade: true: also revoke every key this key minted, and theirs.
     /// pair: true: also revoke its live/test twin.
@@ -39,6 +39,17 @@ extension ReferalliClient {
     /// **Scopes:** `integrations:write`, `connections:write`, `full`, `admin`.
     public func deleteAuthConnectionsId(id: String, idempotencyKey: String? = nil) async throws -> Ok {
         return try await send("DELETE", "/v1/auth/connections/\(Self.segment(id))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Delete a billing account. DELETE /v1/billing/accounts/{accountRef}
+    ///
+    /// The organization was deleted: it has no owner from now on, and its provider customers stop resolving to the old owner, so later payments under it earn nothing. Commissions already earned stay, and refunds still reverse them. Setting an owner again restores it for later payments (payments made while it was deleted are not replayed). Returns the same shape as `PUT …/owner` with `deleted: true` and `ownerCustomerRef: null`; deleting an account with nothing recorded (or already deleted) answers `changed: false`. Publishes `billing_account.owner_changed`. Needs `billing:write`. Audited.
+    ///
+    /// **Auth:** an API key with `billing:write`, or a session with role `owner`, `admin`.
+    ///
+    /// **Scopes:** `billing:write`, `full`, `admin`.
+    public func deleteBillingAccountsAccountRef(accountRef: String, idempotencyKey: String? = nil) async throws -> PutBillingAccountsAccountRefOwnerResponse {
+        return try await send("DELETE", "/v1/billing/accounts/\(Self.segment(accountRef))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Delete a billing connection. DELETE /v1/billing/connections/{id}
@@ -586,7 +597,7 @@ extension ReferalliClient {
 
     /// List auth connections. GET /v1/auth/connections
     ///
-    /// Auth-platform connections with provider, program, status, signature version and rotation state. Secrets are never returned.
+    /// Auth-platform connections with provider, program, status, signature version, rotation state and `lastSignupAt` (when it last filed a new sign-up; null when never). Secrets are never returned.
     ///
     /// **Auth:** an API key with `integrations:read`, or a session of any role.
     ///
@@ -604,6 +615,17 @@ extension ReferalliClient {
     /// Every item of `getAuthConnections`, following the pages.
     public func getAuthConnectionsEach(limit: Int? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) -> AsyncThrowingStream<AuthConnection, Swift.Error> {
         paginate { cursor in try await self.getAuthConnections(limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
+    }
+
+    /// Get an auth connection. GET /v1/auth/connections/{id}
+    ///
+    /// One auth-platform connection, as in the list: provider, program, status, `allowedOrigins`, `tokenVerification` (without its secret), signature version and rotation state. Secrets are never returned. Unknown or deleted connections are 404.
+    ///
+    /// **Auth:** an API key with `integrations:read`, or a session of any role.
+    ///
+    /// **Scopes:** `integrations:read`, `integrations:write`, `connections:read`, `connections:write`, `read`, `full`, `admin`.
+    public func getAuthConnectionsId(id: String, idempotencyKey: String? = nil) async throws -> AuthConnection {
+        return try await send("GET", "/v1/auth/connections/\(Self.segment(id))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Export a user (signed protocol). GET /v1/auth/connections/{id}/export
@@ -644,6 +666,17 @@ extension ReferalliClient {
         return try await send("GET", "/v1/auth/providers", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
+    /// Get a billing account's owner. GET /v1/billing/accounts/{accountRef}
+    ///
+    /// What is recorded for a billing account: `{ accountRef, ownerCustomerRef, since, renamedTo, deleted }`. A renamed id answers with `renamedTo` (and `ownerCustomerRef: null`); it follows that account. `404` when nothing is recorded.
+    ///
+    /// **Auth:** an API key with `billing:read`, or a session of any role.
+    ///
+    /// **Scopes:** `billing:read`, `billing:write`, `read`, `full`, `admin`.
+    public func getBillingAccountsAccountRef(accountRef: String, idempotencyKey: String? = nil) async throws -> GetBillingAccountsAccountRefResponse {
+        return try await send("GET", "/v1/billing/accounts/\(Self.segment(accountRef))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// List billing connections. GET /v1/billing/connections
     ///
     /// Billing connections (deleted ones excluded), with status (`active`, `paused`, or `awaiting_secret` until a provider-issued secret is set), `programIds`, whether credentials are needed and set, the value mapping and secret-rotation state. A program-scoped API key sees only connections whose `programIds` are all within its own.
@@ -679,7 +712,7 @@ extension ReferalliClient {
 
     /// List billing events. GET /v1/billing/events
     ///
-    /// Payments, refunds and other billing events received from every connection, newest first. Filter with `customerRef`, or `status=ignored_by_filter` for the events a product filter or the internal-customer list set aside (recorded, never processed). `ignoredReason: "no_referral_in_scope"` (with `status: "processed"`) marks a payment on a connection limited to some programs from a customer referred only in other programs: it earned nothing.
+    /// Payments, refunds and other billing events received from every connection, newest first. Filter with `customerRef`, or `status=ignored_by_filter` for the events a product filter or the internal-customer list set aside (recorded, never processed), or `status=parked` for the refunds and disputes waiting for their payment: applied when it arrives, or dropped after 7 days with a `billing_event.expired` webhook event. `ignoredReason: "no_referral_in_scope"` (with `status: "processed"`) marks a payment on a connection limited to some programs from a customer referred only in other programs: it earned nothing.
     ///
     /// **Auth:** an API key with `billing:read`, or a session of any role.
     ///
@@ -868,13 +901,13 @@ extension ReferalliClient {
     /// ending_before: A cursor: returns the items before this item id (the previous page). Not with `starting_after`. From API version 2026-11-01; ignored under 2026-10-21, where lists are a capped plain array.
     /// created[gte]: Only items created at or after this time (ISO 8601), on lists of timestamped records. From API version 2026-11-01; ignored under 2026-10-21, where lists are a capped plain array.
     /// created[lte]: Only items created at or before this time (ISO 8601), on lists of timestamped records. From API version 2026-11-01; ignored under 2026-10-21, where lists are a capped plain array.
-    public func getCommissions(partnerId: String? = nil, programId: String? = nil, type: String? = nil, referralId: String? = nil, limit: Int? = nil, startingAfter: String? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) async throws -> Page<CommissionEvent> {
-        return try await send("GET", "/v1/commissions", query: [("partnerId", Self.queryString(partnerId)), ("programId", Self.queryString(programId)), ("type", Self.queryString(type)), ("referralId", Self.queryString(referralId)), ("limit", Self.queryString(limit)), ("starting_after", Self.queryString(startingAfter)), ("ending_before", Self.queryString(endingBefore)), ("created[gte]", Self.queryString(createdGte)), ("created[lte]", Self.queryString(createdLte))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    public func getCommissions(partnerId: String? = nil, programId: String? = nil, type: String? = nil, referralId: String? = nil, customerRef: String? = nil, limit: Int? = nil, startingAfter: String? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) async throws -> Page<CommissionEvent> {
+        return try await send("GET", "/v1/commissions", query: [("partnerId", Self.queryString(partnerId)), ("programId", Self.queryString(programId)), ("type", Self.queryString(type)), ("referralId", Self.queryString(referralId)), ("customerRef", Self.queryString(customerRef)), ("limit", Self.queryString(limit)), ("starting_after", Self.queryString(startingAfter)), ("ending_before", Self.queryString(endingBefore)), ("created[gte]", Self.queryString(createdGte)), ("created[lte]", Self.queryString(createdLte))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Every item of `getCommissions`, following the pages.
-    public func getCommissionsEach(partnerId: String? = nil, programId: String? = nil, type: String? = nil, referralId: String? = nil, limit: Int? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) -> AsyncThrowingStream<CommissionEvent, Swift.Error> {
-        paginate { cursor in try await self.getCommissions(partnerId: partnerId, programId: programId, type: type, referralId: referralId, limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
+    public func getCommissionsEach(partnerId: String? = nil, programId: String? = nil, type: String? = nil, referralId: String? = nil, customerRef: String? = nil, limit: Int? = nil, endingBefore: String? = nil, createdGte: String? = nil, createdLte: String? = nil, idempotencyKey: String? = nil) -> AsyncThrowingStream<CommissionEvent, Swift.Error> {
+        paginate { cursor in try await self.getCommissions(partnerId: partnerId, programId: programId, type: type, referralId: referralId, customerRef: customerRef, limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
     }
 
     /// Get a commission. GET /v1/commissions/{id}
@@ -1317,11 +1350,11 @@ extension ReferalliClient {
 
     /// Get the current caller. GET /v1/me
     ///
-    /// Who is calling. With a user session: the user and their org memberships (no `x-org-id` needed). With an API key: `{ user: null, memberships: [], apiKey, org: { id, name } }`, where `apiKey` holds the key (name, prefix, scopes, pinned `apiVersion`, `livemode`, owner, expiry, `programIds`). The mode is `apiKey.livemode`; there is no top-level `livemode`.
+    /// Who is calling. With a user session: the user and their org memberships (no `x-org-id` needed). With an API key: `{ user: null, memberships: [], apiKey, org: { id, name } }`, where `apiKey` holds the key (name, prefix, scopes, pinned `apiVersion`, `livemode`, owner, expiry, `programIds`). The mode is `apiKey.livemode`; there is no top-level `livemode`. Any key may call it, whatever its scopes.
     ///
-    /// **Auth:** an API key with `team:read`, or a session of any role.
+    /// **Auth:** an API key with `null`, or a session of any role.
     ///
-    /// **Scopes:** `team:read`, `team:write`, `read`, `full`, `admin`.
+    /// **Scopes:** .
     public func getMe(idempotencyKey: String? = nil) async throws -> GetMeResponse {
         return try await send("GET", "/v1/me", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
@@ -1598,6 +1631,17 @@ extension ReferalliClient {
     /// **Scopes:** `org:read`, `org:write`, `read`, `full`, `admin`.
     public func getOrgTrackingConsent(idempotencyKey: String? = nil) async throws -> GetOrgTrackingConsentResponse {
         return try await send("GET", "/v1/org/tracking-consent", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
+    /// Both modes' tracking tokens. GET /v1/org/tracking-tokens
+    ///
+    /// The org's public tracking values for live and test mode, labelled: `{ mode, live, test }`, each with `orgId`, `trackingToken`, `scriptUrl` (aff.js), `linkBaseUrl` (the verified link domain, else Referalli's origin) and `linkTemplate` (`…/go/{token}/{code}`). `mode` is the caller's. Any key reads both, live or test; nothing else crosses modes. The test org is created on first use.
+    ///
+    /// **Auth:** an API key with `org:read`, or a session of any role.
+    ///
+    /// **Scopes:** `org:read`, `org:write`, `read`, `full`, `admin`.
+    public func getOrgTrackingTokens(idempotencyKey: String? = nil) async throws -> TrackingTokens {
+        return try await send("GET", "/v1/org/tracking-tokens", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// List outreach messages. GET /v1/outreach
@@ -2520,6 +2564,17 @@ extension ReferalliClient {
         paginate { cursor in try await self.getPrograms(slug: slug, limit: limit, startingAfter: cursor, endingBefore: endingBefore, createdGte: createdGte, createdLte: createdLte, idempotencyKey: idempotencyKey) }
     }
 
+    /// Check a public handle. GET /v1/programs/handle-availability
+    ///
+    /// Whether `handle` can be set as a program's `publicHandle`, using the same rules as `POST`/`PATCH /v1/programs`: `available: false` with `reason: "invalid"` when it is not 3 to 48 characters of `a-z`, `0-9` and `-`, or `reason: "taken"` when any program (in any org, including your own) already has it. Handles are claimed only by setting them, so a free handle can still be taken before you do; the setter's `409` names `details.field: "publicHandle"`.
+    ///
+    /// **Auth:** an API key with `programs:read`, or a session of any role.
+    ///
+    /// **Scopes:** `programs:read`, `programs:write`, `read`, `full`, `admin`.
+    public func getProgramsHandleAvailability(handle: String, idempotencyKey: String? = nil) async throws -> GetProgramsHandleAvailabilityResponse {
+        return try await send("GET", "/v1/programs/handle-availability", query: [("handle", Self.queryString(handle))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    }
+
     /// Get a program. GET /v1/programs/{id}
     ///
     /// One program with its settings (defaults filled in) and public page.
@@ -2710,13 +2765,13 @@ extension ReferalliClient {
 
     /// Get a program's terms. GET /v1/programs/{id}/terms
     ///
-    /// The program's commission terms for product copy, from its latest commission rule version (`ruleVersion`): the `base` (`percentBps`, or `amountMinor` and `currency`), how long it recurs, the hold, and `summary.en`, an English sentence built deterministically from the rule, such as "20% of every payment for 12 months" or "$50.00 for the first payment only". Bounties are added (", plus $5.00 per signup"); rule conditions add "(conditions apply)"; overrides, tiers or new-vs-expansion rates set `ratesVary` and add "(rates vary)" rather than quote one rate. Partner-group rates and promotions are not included. Publishing a new rule version changes the terms on the next read. `404` when the program has no rule yet. Program-scoped keys read their own programs.
+    /// The program's commission terms for product copy, from its latest commission rule version (`ruleVersion`): the `base` (`percentBps`, or `amountMinor` and `currency`), how long it recurs, the hold, and `summary`, the same sentence in each partner-portal locale (`en`, `es`, `de`, `fr`, `pt`, `it`, `nl`, `sv`, `ja`, `zh`), built deterministically from the rule, such as "20% of every payment for 12 months" or "$50.00 for the first payment only". Bounties are added (", plus $5.00 per signup"); rule conditions add "(conditions apply)"; overrides, tiers or new-vs-expansion rates set `ratesVary` and add "(rates vary)" rather than quote one rate. With `?locale=de` or an `Accept-Language` header the response also names the chosen `locale` and its sentence as `text` (an unsupported language gets `en`). Bounty event names are kept as written. Partner-group rates and promotions are not included. Publishing a new rule version changes the terms on the next read. `404` when the program has no rule yet. Program-scoped keys read their own programs.
     ///
     /// **Auth:** an API key with `programs:read`, or a session of any role.
     ///
     /// **Scopes:** `programs:read`, `programs:write`, `read`, `full`, `admin`.
-    public func getProgramsIdTerms(id: String, idempotencyKey: String? = nil) async throws -> ProgramTerms {
-        return try await send("GET", "/v1/programs/\(Self.segment(id))/terms", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    public func getProgramsIdTerms(id: String, locale: String? = nil, idempotencyKey: String? = nil) async throws -> ProgramTerms {
+        return try await send("GET", "/v1/programs/\(Self.segment(id))/terms", query: [("locale", Self.queryString(locale))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// List terms acceptances. GET /v1/programs/{id}/terms-acceptances
@@ -2765,11 +2820,11 @@ extension ReferalliClient {
 
     /// Get a program's public page. GET /v1/public/programs/{handle}
     ///
-    /// What a program's public join page shows: the program and merchant names, pitch, cookie window, terms, base commission, branding and whether joining is approved at once. No authentication; only active live programs with a `publicHandle` are found.
+    /// What a program's public join page shows: the program and merchant names, pitch, cookie window, terms, base commission, branding and whether joining is approved at once. `terms` is the program's commission terms as `GET /v1/programs/{id}/terms` gives them (the rule's base, how long it recurs, hold and `summary` in each portal locale), or null when it has no rule yet; with `?locale=` or `Accept-Language` it also names the chosen `locale` and its sentence as `text`. No authentication; only active live programs with a `publicHandle` are found.
     ///
     /// **Auth:** none.
-    public func getPublicProgramsHandle(handle: String, idempotencyKey: String? = nil) async throws -> GetPublicProgramsHandleResponse {
-        return try await send("GET", "/v1/public/programs/\(Self.segment(handle))", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
+    public func getPublicProgramsHandle(handle: String, locale: String? = nil, idempotencyKey: String? = nil) async throws -> GetPublicProgramsHandleResponse {
+        return try await send("GET", "/v1/public/programs/\(Self.segment(handle))", query: [("locale", Self.queryString(locale))], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// List referrals. GET /v1/referrals
@@ -3438,24 +3493,33 @@ extension ReferalliClient {
 
     /// Update an API key. PATCH /v1/api-keys/{id}
     ///
-    /// Changes a key's pinned `apiVersion`, `owner`, expiry (`expiresInDays` from now; `null` removes it) or `programIds` (`null` makes it org-wide); `apiVersion: "latest"` pins it to today's newest version. A new expiry re-arms the `api_key.expiring` notices. Revoked keys are 404. Needs an owner or admin session, or an API key with the `admin` scope. Audited.
+    /// Renames a key or changes its pinned `apiVersion`, `owner`, expiry (`expiresInDays` from now, or `expiresAt`, an ISO 8601 time at most 3650 days out, not both; `null` removes it) or `programIds` (`null` makes it org-wide); `apiVersion: "latest"` pins it to today's newest version. A new expiry re-arms the `api_key.expiring` notices. `name` renames it; `scopes` replaces its scopes. Revoked keys are 404. Needs an owner or admin session, or an API key with the `admin` scope. A key holding `api_keys:mint` may also do this for keys it minted itself (403 for any other), but only to narrow `scopes` and `programIds`, never widen them or make the key org-wide. Audited.
     ///
-    /// **Auth:** an API key with `team:write`, or a session of any role.
+    /// **Auth:** an API key with `api_keys:mint`, or a session of any role.
     ///
-    /// **Scopes:** `team:write`, `full`, `admin`.
+    /// **Scopes:** `api_keys:mint`, `admin`.
     public func patchApiKeysId(id: String, _ body: PatchApiKeysIdBody, idempotencyKey: String? = nil) async throws -> PatchApiKeysIdResponse {
         return try await send("PATCH", "/v1/api-keys/\(Self.segment(id))", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Update an auth connection. PATCH /v1/auth/connections/{id}
     ///
-    /// Pauses or resumes a connection, renames it, changes `autoEnrollUsers` or the destination of auto-created links, turns `resolveBillingCustomers` on or off, or (signed-protocol connections) sets `signatureVersion`: `v2` to require request-line signatures, `v1+v2` to accept both again. `resolveBillingCustomers` (any provider, default false): a billing customer that arrives with no customerRef (no `referalli_customer_ref` metadata, no `customerRefMetadataKey` hit) in a program this connection serves (within the billing connection's `programIds`) is resolved through this connection's users: `referalli_user_id` or `<provider>_user_id` metadata naming a user it reported, else exactly one user whose current email is the customer's and verified. The billing link is recorded as metadata would record it; none or several matches record `ignoredReason: "identity_unresolved"` / `"identity_ambiguous"` on the billing event. Explicit metadata always wins. Matching uses only the org's own data. `tokenVerification` replaces the widget-session verifier (an HS256 secret is kept when `sharedSecret` is left out; `null` removes it) and `allowedOrigins` replaces the origin list.
+    /// Pauses or resumes a connection, renames it, changes `autoEnrollUsers` or the destination of auto-created links, turns `resolveBillingCustomers` on or off, or (signed-protocol connections) sets `signatureVersion`: `v2` to require request-line signatures, `v1+v2` to accept both again. `resolveBillingCustomers` (any provider, default false): a billing customer that arrives with no customerRef (no `referalli_customer_ref` metadata, no `customerRefMetadataKey` hit) in a program this connection serves (within the billing connection's `programIds`) is resolved through this connection's users: `referalli_user_id` or `<provider>_user_id` metadata naming a user it reported, else exactly one user whose current email is the customer's and verified. The billing link is recorded as metadata would record it; none or several matches record `ignoredReason: "identity_unresolved"` / `"identity_ambiguous"` on the billing event. Explicit metadata always wins. Matching uses only the org's own data. `tokenVerification` replaces the widget-session verifier (an HS256 secret is kept when `sharedSecret` is left out; `null` removes it) and `allowedOrigins` replaces the origin list. The auth platform itself can also call this path, signed with the connection secret and with only `allowedOrigins` in the body (no session), to set its origins; see `PUT /v1/auth/connections/{id}/origins`.
     ///
     /// **Auth:** an API key with `integrations:write`, or a session with role `owner`, `admin`.
     ///
     /// **Scopes:** `integrations:write`, `connections:write`, `full`, `admin`.
     public func patchAuthConnectionsId(id: String, _ body: PatchAuthConnectionsIdBody, idempotencyKey: String? = nil) async throws -> PatchAuthConnectionsIdResponse {
         return try await send("PATCH", "/v1/auth/connections/\(Self.segment(id))", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Set a connection's allowed origins (signed protocol, PATCH). PATCH /v1/auth/connections/{id}/origins
+    ///
+    /// The same as `PUT /v1/auth/connections/{id}/origins`. Signed with the connection secret in `x-referalli-signature: t=<unix>,v1=…,v2=…` (v2 also signs the request line; once a connection has seen v2 it requires it), with a unique `x-referalli-id` per call. The legacy header names from before the rename are also accepted, for existing integrations. Calls older than 5 minutes, reused ids (`409 replay`), paused connections (`423 connection_paused`) and unknown fields (`422`) are refused.
+    ///
+    /// **Auth:** none.
+    public func patchAuthConnectionsIdOrigins(id: String, _ body: PatchAuthConnectionsIdOriginsBody, idempotencyKey: String? = nil) async throws -> PatchAuthConnectionsIdOriginsResponse {
+        return try await send("PATCH", "/v1/auth/connections/\(Self.segment(id))/origins", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Update a billing connection. PATCH /v1/billing/connections/{id}
@@ -3548,7 +3612,7 @@ extension ReferalliClient {
 
     /// Update a program. PATCH /v1/programs/{id}
     ///
-    /// Changes any program field or setting; omitted fields keep their value, and `publicPage` is merged. Changing `termsMd` records a new terms version. Setting `status` to `paused` or `archived` stops new attribution. `mobileApp` (iOS Team ID and bundle id, Android package and signing-certificate fingerprints) publishes the program's apps in the universal-links and App Links files on the org's link hosts. `destinationUrl` moves the program's default link destination: every link still on the old default (the widget's or a sign-in connection's) is repointed in the same call, custom destinations stay, and links already shared follow at click time; `{code}` in it becomes the link's code. Audited.
+    /// Changes any program field or setting; omitted fields keep their value, and `publicPage` is merged. Changing `termsMd` records a new terms version. Setting `status` to `paused` or `archived` stops new attribution. `signupPaymentGraceMinutes` (0 to 1440, default 5) is how long before the referral's sign-up time a payment still earns. `mobileApp` (iOS Team ID and bundle id, Android package and signing-certificate fingerprints) publishes the program's apps in the universal-links and App Links files on the org's link hosts. `destinationUrl` moves the program's default link destination: every link still on the old default (the widget's or a sign-in connection's) is repointed in the same call, custom destinations stay, and links already shared follow at click time; `{code}` in it becomes the link's code. A `publicHandle` another program has is `409 conflict` with `details: { field: 'publicHandle' }`. Audited.
     ///
     /// **Auth:** an API key with `programs:write`, or a session with role `owner`, `admin`.
     ///
@@ -3673,22 +3737,22 @@ extension ReferalliClient {
 
     /// Create an API key. POST /v1/api-keys
     ///
-    /// Mints a secret key (`rk_live_…` / `rk_test_…`), shown only in this response (and in its `Idempotency-Key` replay: a retry with the same key and body within 24 hours returns this response again, secret included, without minting another). `scopes` defaults to `full`; a key can't grant scopes it doesn't hold. `mode` picks live, test or a matching pair of both (`both` returns `{ pairId, live, test }`); a test-mode caller can mint test keys only. `publishable: true` mints a browser-safe `rk_pub_` key limited to `programs:read` and `events:write` from `allowedOrigins`. `apiVersion` pins the key to a version, or `latest` (the default) to the newest version at the time of the call; the pin never moves on its own (a key keeps answering in that version after newer ones ship) until you `PATCH` it or send a `referalli-version` header. A key pinned to `2026-10-21` gets every list as a capped plain array instead of the paginated envelope. `programIds` limits the key to those programs (their partners, links, referrals, commissions, enrollments, webhook endpoints whose `programIds` are all within the key's, with their deliveries, and billing connections likewise); a program-scoped key gets 403 `program_scoped_key` on org-wide endpoints (keys, team, org settings, the rest of billing, payouts, the event feed, analytics, creating programs). An `api_keys:mint` key may also call this (and no other key endpoint): it can't mint `admin` or `api_keys:mint` keys or scopes it doesn't hold, and a program-scoped one must send `programIds` within its own (`403` otherwise). Needs an owner or admin session, or an API key with the `admin` scope. Audited.
+    /// Expiry is `expiresInDays` or `expiresAt` (ISO 8601, at most 3650 days out), not both. Mints a secret key (`rk_live_…` / `rk_test_…`), shown only in this response (and in its `Idempotency-Key` replay: a retry with the same key and body within 24 hours returns this response again, secret included, without minting another). `scopes` defaults to `full`; a key can't grant scopes it doesn't hold. `mode` picks live, test or a matching pair of both (`both` returns `{ pairId, live, test }`); a test-mode caller can mint test keys only. `publishable: true` mints a browser-safe `rk_pub_` key limited to `programs:read` and `events:write` from `allowedOrigins`. `apiVersion` pins the key to a version, or `latest` (the default) to the newest version at the time of the call; the pin never moves on its own (a key keeps answering in that version after newer ones ship) until you `PATCH` it or send a `referalli-version` header. A key pinned to `2026-10-21` gets every list as a capped plain array instead of the paginated envelope. `programIds` limits the key to those programs (their partners, links, referrals, commissions, enrollments, webhook endpoints whose `programIds` are all within the key's, with their deliveries, billing connections likewise, auth connections of those programs, and privacy lookup, export, forget and requests for people in those programs); a program-scoped key gets 403 `program_scoped_key` on org-wide endpoints (keys, team, org settings, the rest of billing, payouts, the event feed, analytics, creating programs). An `api_keys:mint` key may also call this (and no other key endpoint): it can't mint `admin` or `api_keys:mint` keys or scopes it doesn't hold, and a program-scoped one must send `programIds` within its own (`403` otherwise). Needs an owner or admin session, or an API key with the `admin` scope. Audited.
     ///
-    /// **Auth:** an API key with `team:write`, or a session of any role.
+    /// **Auth:** an API key with `api_keys:mint`, or a session of any role.
     ///
-    /// **Scopes:** `team:write`, `api_keys:mint`, `full`, `admin`.
+    /// **Scopes:** `api_keys:mint`, `admin`.
     public func postApiKeys(_ body: PostApiKeysBody, idempotencyKey: String? = nil) async throws -> PostApiKeysResponse {
         return try await send("POST", "/v1/api-keys", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Rotate an API key. POST /v1/api-keys/{id}/rotate
     ///
-    /// Mints a replacement key with the same name, scopes, origins, version pin, owner, programs and lifetime (an expiring key's new expiry is the same length from now), returned once with `rotatedFrom: { id, expiresAt }`. The old key keeps working for `graceHours` (default 24, at most 168, 0 = stop now), then expires; it gets no `api_key.expiring` notice. An expired or revoked key can't be rotated (409 `api_key_expired` / 404). Needs an owner or admin session, or an API key with the `admin` scope. Audited.
+    /// Mints a replacement key with the same name, scopes, origins, version pin, owner, programs and lifetime (an expiring key's new expiry is the same length from now), returned once with `rotatedFrom: { id, expiresAt }`. The old key keeps working for `graceHours` (default 24, at most 168, 0 = stop now), then expires; it gets no `api_key.expiring` notice. An expired or revoked key can't be rotated (409 `api_key_expired` / 404). Needs an owner or admin session, or an API key with the `admin` scope. A key holding `api_keys:mint` may also do this for keys it minted itself (403 for any other). Audited.
     ///
-    /// **Auth:** an API key with `team:write`, or a session of any role.
+    /// **Auth:** an API key with `api_keys:mint`, or a session of any role.
     ///
-    /// **Scopes:** `team:write`, `full`, `admin`.
+    /// **Scopes:** `api_keys:mint`, `admin`.
     public func postApiKeysIdRotate(id: String, _ body: PostApiKeysIdRotateBody, idempotencyKey: String? = nil) async throws -> PostApiKeysIdRotateResponse {
         return try await send("POST", "/v1/api-keys/\(Self.segment(id))/rotate", query: [], body: body, idempotencyKey: idempotencyKey)
     }
@@ -3735,6 +3799,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/auth/connections", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Set an organization's owner (signed protocol). POST /v1/auth/connections/{id}/accounts
+    ///
+    /// The `accounts` capability: an organization the app bills under (`accountRef`: its id in billing metadata, e.g. Atlas's `external_id`) is owned by `ownerCustomerRef` (a user the connection reports). Its payments earn for the owner's referral; send it again whenever ownership changes. When the organization's id changes, send the new id as `accountRef` with the old one as `previousAccountRef` (the owner carries over unless `ownerCustomerRef` is sent): the old id then follows the new one. When it is deleted, send `{ accountRef, deleted: true }`: it has no owner from then on, so its payments earn nothing (earned commissions stay; refunds still reverse them). Same as `PUT /v1/billing/accounts/{accountRef}/owner` and `DELETE /v1/billing/accounts/{accountRef}`; returns `{ ok, accountRef, ownerCustomerRef, previousOwnerCustomerRef, renamedFrom, deleted, changed, relinked, reprocessedPayments }`; a repeat answers `changed: false`. Publishes `billing_account.owner_changed`. Signed with the connection secret in `x-referalli-signature: t=<unix>,v1=…,v2=…` (v2 also signs the request line; once a connection has seen v2 it requires it), with a unique `x-referalli-id` per call. The legacy header names from before the rename are also accepted, for existing integrations. Calls older than 5 minutes, reused ids (`409 replay`), paused connections (`423 connection_paused`) and unknown fields (`422`) are refused.
+    ///
+    /// **Auth:** none.
+    public func postAuthConnectionsIdAccounts(id: String, _ body: PostAuthConnectionsIdAccountsBody, idempotencyKey: String? = nil) async throws -> PostAuthConnectionsIdAccountsResponse {
+        return try await send("POST", "/v1/auth/connections/\(Self.segment(id))/accounts", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Change a user's id (signed protocol). POST /v1/auth/connections/{id}/aliases
     ///
     /// The app stamped or changed a user's id after the sign-up was filed: referrals and identity move from `fromCustomerRef` to `toCustomerRef`. Publishes `customer.aliased`. Signed with the connection secret in `x-referalli-signature: t=<unix>,v1=…,v2=…` (v2 also signs the request line; once a connection has seen v2 it requires it), with a unique `x-referalli-id` per call. The legacy header names from before the rename are also accepted, for existing integrations. Calls older than 5 minutes, reused ids (`409 replay`), paused connections (`423 connection_paused`) and unknown fields (`422`) are refused.
@@ -3764,7 +3837,7 @@ extension ReferalliClient {
 
     /// Test an auth connection (signed protocol). POST /v1/auth/connections/{id}/ping
     ///
-    /// Proves the secret works: returns the connection, its program and org, the server time (to check clock skew) and `capabilities` (`{ partners: true }`: user-chosen referral codes through `/partners`). Signed with the connection secret in `x-referalli-signature: t=<unix>,v1=…,v2=…` (v2 also signs the request line; once a connection has seen v2 it requires it), with a unique `x-referalli-id` per call. The legacy header names from before the rename are also accepted, for existing integrations. Calls older than 5 minutes, reused ids (`409 replay`), paused connections (`423 connection_paused`) and unknown fields (`422`) are refused.
+    /// Proves the secret works: returns the connection, its program and org, the server time (to check clock skew) and `capabilities` (`{ partners: true, origins: true, accounts: true }`: user-chosen referral codes through `/partners`, setting `allowedOrigins` through `PUT …/origins` or a signed PATCH, and organization owners through `/accounts`). Signed with the connection secret in `x-referalli-signature: t=<unix>,v1=…,v2=…` (v2 also signs the request line; once a connection has seen v2 it requires it), with a unique `x-referalli-id` per call. The legacy header names from before the rename are also accepted, for existing integrations. Calls older than 5 minutes, reused ids (`409 replay`), paused connections (`423 connection_paused`) and unknown fields (`422`) are refused.
     ///
     /// **Auth:** a signature (see above); no API key.
     public func postAuthConnectionsIdPing(id: String, _ body: [String: JSONValue], idempotencyKey: String? = nil) async throws -> PostAuthConnectionsIdPingResponse {
@@ -3882,6 +3955,17 @@ extension ReferalliClient {
         return try await send("POST", "/v1/billing/connections", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Send events to a generic connection. POST /v1/billing/connections/{id}/events
+    ///
+    /// The generic connection's webhook body (`{ "events": [...] }`, up to 500) sent with an API key instead of the connection's HMAC signature, so your server needs no second secret. Runs the same processing as `POST /webhooks/billing/{id}`: paid invoices become conversions and commissions, refunds and disputes reverse them, and each event is idempotent by `providerEventId` (a resend answers `duplicate: true`), whichever of the two routes sent it first. Needs `billing:write`; a program-scoped key reaches only connections limited to its own programs. `404` for an unknown, deleted or paused connection; `409 conflict` for a connection that isn't `generic` (those take their provider's webhooks).
+    ///
+    /// **Auth:** an API key with `billing:write`, or a session with role `owner`, `admin`.
+    ///
+    /// **Scopes:** `billing:write`, `full`, `admin`.
+    public func postBillingConnectionsIdEvents(id: String, _ body: PostBillingConnectionsIdEventsBody, idempotencyKey: String? = nil) async throws -> PostBillingConnectionsIdEventsResponse {
+        return try await send("POST", "/v1/billing/connections/\(Self.segment(id))/events", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Rotate the webhook signing secret. POST /v1/billing/connections/{id}/rotate-secret
     ///
     /// Generates a new signing secret, returned once. The previous one keeps verifying until `previousSecretExpiresAt` (24 hours). Audited.
@@ -3902,6 +3986,17 @@ extension ReferalliClient {
     /// **Scopes:** `billing:write`, `full`, `admin`.
     public func postBillingConnectionsIdValueMappingPreview(id: String, _ body: PostBillingConnectionsIdValueMappingPreviewBody, idempotencyKey: String? = nil) async throws -> ValueMappingPreview {
         return try await send("POST", "/v1/billing/connections/\(Self.segment(id))/value-mapping/preview", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Release a held payment. POST /v1/billing/events/{id}/release
+    ///
+    /// A payment over its connection's `maxAmountMinor` (default 1,000,000,000 minor units), or dated more than a day ahead, is recorded with `status: "held"` and earns nothing. Releasing it says it is real: it earns as it would have on arrival, and any refund that waited for it applies.
+    ///
+    /// **Auth:** an API key with `billing:write`, or a session with role `owner`, `admin`.
+    ///
+    /// **Scopes:** `billing:write`, `full`, `admin`.
+    public func postBillingEventsIdRelease(id: String, idempotencyKey: String? = nil) async throws -> PostBillingEventsIdReleaseResponse {
+        return try await send("POST", "/v1/billing/events/\(Self.segment(id))/release", query: [], body: nil as NoBody?, idempotencyKey: idempotencyKey)
     }
 
     /// Add an internal customer. POST /v1/billing/internal-customers
@@ -4472,7 +4567,7 @@ extension ReferalliClient {
 
     /// Mint an executor key under a Cookie Munch partner link. POST /v1/orgs/{orgId}/privacy/executor-key
     ///
-    /// Called by Cookie Munch, not by you (CMU-X25): mints (or rotates) this org's cm-standard-v2 executor key so Cookie Munch's `referalli` executor preset can connect without a pasted key. The request must be signed by Cookie Munch's partner key exactly like its consent deliveries: `CookieMunch-Partner-Signature: t=<unix seconds>,kid=<key id>,ed25519=<base64url>` over `<t>.<raw body>`, with the key named in `https://api.cookiemunch.net/v1/partner/jwks.json` (300 s window; each signed request and each body `nonce` works once, a replay is 409; `partner` must be `referalli` and `externalId` the org in the path). Referalli then confirms the partner link with Cookie Munch over its own partner token (`GET /v1/partner/links`): it must be `active` or `waiting_on_partner`, name this org as `externalId`, sit on a site this org registered (`PUT /v1/org/consent-partners/cookiemunch`), and match `cbid`/`linkId` when sent; otherwise 403 `no_grant`. 201 `{secret, executorUrl, contract, orgId, linkId, cbid, rotated}`: `secret` is shown once and is the bearer key for `executorUrl` (`https://referalli.com/api`, the cm-standard-v2 baseUrl: calls go to `<executorUrl>/privacy/*`), where it reaches only this org's referred customers and partners. The old key stops working at once. Audited (`privacy.executor_key_minted`).
+    /// Called by Cookie Munch, not by you (CMU-X25): mints (or rotates) this org's cm-standard-v2 executor key, limited to `programIds` when sent so Cookie Munch's `referalli` executor preset can connect without a pasted key. The request must be signed by Cookie Munch's partner key exactly like its consent deliveries: `CookieMunch-Partner-Signature: t=<unix seconds>,kid=<key id>,ed25519=<base64url>` over `<t>.<raw body>`, with the key named in `https://api.cookiemunch.net/v1/partner/jwks.json` (300 s window; each signed request and each body `nonce` works once, a replay is 409; `partner` must be `referalli` and `externalId` the org in the path). Referalli then confirms the partner link with Cookie Munch over its own partner token (`GET /v1/partner/links`): it must be `active` or `waiting_on_partner`, name this org as `externalId`, sit on a site this org registered (`PUT /v1/org/consent-partners/cookiemunch`), and match `cbid`/`linkId` when sent; otherwise 403 `no_grant`. 201 `{secret, executorUrl, contract, orgId, linkId, cbid, rotated}`: `secret` is shown once and is the bearer key for `executorUrl` (`https://referalli.com/api`, the cm-standard-v2 baseUrl: calls go to `<executorUrl>/privacy/*`), where it reaches only this org's referred customers and partners. The old key stops working at once. Audited (`privacy.executor_key_minted`).
     ///
     /// **Auth:** none.
     public func postOrgsOrgIdPrivacyExecutorKey(orgId: String, _ body: PostOrgsOrgIdPrivacyExecutorKeyBody, idempotencyKey: String? = nil) async throws -> PostOrgsOrgIdPrivacyExecutorKeyResponse {
@@ -4945,7 +5040,7 @@ extension ReferalliClient {
 
     /// Create a program. POST /v1/programs
     ///
-    /// Creates an affiliate program: its attribution model, cookie window, how long after sign-up a conversion still counts (`signupToConversionDays`, 1 to 1095, default 365; `cookieWindowDays` is 1 to 400, default 60), terms, public page and settings. `slug` is unique per org. Terms are versioned so partners can be asked to accept new ones. Over the plan's program limit this is `402 payment_required`.
+    /// Creates an affiliate program: its attribution model, cookie window, how long after sign-up a conversion still counts (`signupToConversionDays`, 1 to 1095, default 365; `cookieWindowDays` is 1 to 400, default 60), terms, public page and settings (`signupPaymentGraceMinutes`, 0 to 1440, default 5: how long before the referral's sign-up time a payment still earns). `slug` is unique per org. Terms are versioned so partners can be asked to accept new ones. `publicHandle` is unique across every org (check it first with `GET /v1/programs/handle-availability`). A taken `slug` or `publicHandle` is `409 conflict` with `details.field` naming it (`slug` or `publicHandle`). Over the plan's program limit this is `402 payment_required`.
     ///
     /// **Auth:** an API key with `programs:write`, or a session with role `owner`, `admin`.
     ///
@@ -5097,13 +5192,24 @@ extension ReferalliClient {
 
     /// Attribute a new customer. POST /v1/referrals/associate
     ///
-    /// The key server-side call: tell Referalli a customer signed up, with whatever you know about where they came from (`referralToken`/`ref_click_id`, `anonId`, `couponCode`, `emailHash`, IP and user agent). The attribution engine picks the partner under the program's model and windows. `referral` is `null` when no partner matched (not an error); `reasoning.notes` says why. Repeating `idempotencyKey` returns the existing referral. `occurredAt` records a late call at the real sign-up time (up to 5 minutes of clock skew is tolerated) and backfills payments since. `emailDomain` lets burner-email sign-ups be held for review. Publishes `referral.created` (or `referral.held`).
+    /// The key server-side call: tell Referalli a customer signed up, with whatever you know about where they came from (`referralToken`/`ref_click_id`, `anonId`, `couponCode`, `emailHash`, IP and user agent). The attribution engine picks the partner under the program's model and windows. `referral` is `null` when no partner matched (not an error); `reasoning.notes` says why. Repeating `idempotencyKey` returns the existing referral. `occurredAt` records a late call at the real sign-up time (up to 5 minutes of clock skew is tolerated) and backfills payments since. `emailDomain` lets burner-email sign-ups be held for review. `handoffToken` (from `POST /t/{orgToken}/handoff` or `POST /v1/referrals/handoff-tokens`) fills `anonId`, `referralToken` and `couponCode` where they are not sent; a malformed, expired or other org's token is `400 invalid_handoff_token`. Publishes `referral.created` (or `referral.held`).
     ///
     /// **Auth:** an API key with `referrals:write`, or a session of any role.
     ///
     /// **Scopes:** `referrals:write`, `full`, `admin`.
     public func postReferralsAssociate(_ body: PostReferralsAssociateBody, idempotencyKey: String? = nil) async throws -> AssociateResponse {
         return try await send("POST", "/v1/referrals/associate", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Mint a hand-off token. POST /v1/referrals/handoff-tokens
+    ///
+    /// The server-side twin of `POST /t/{orgToken}/handoff`: signs `anonId`, `clickId` and/or `code` (at least one) into a token valid for 24 hours, for this org only, to pass later to `POST /v1/referrals/associate` as `handoffToken`. Use it when the server that saw the landing (`?ref_click_id=`) is not the one that files the sign-up.
+    ///
+    /// **Auth:** an API key with `referrals:write`, or a session of any role.
+    ///
+    /// **Scopes:** `referrals:write`, `full`, `admin`.
+    public func postReferralsHandoffTokens(_ body: PostReferralsHandoffTokensBody, idempotencyKey: String? = nil) async throws -> HandoffToken {
+        return try await send("POST", "/v1/referrals/handoff-tokens", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Approve a held referral. POST /v1/referrals/{id}/approve
@@ -5196,7 +5302,7 @@ extension ReferalliClient {
 
     /// Simulate billing history. POST /v1/sandbox/simulate
     ///
-    /// Generates deterministic billing history through the real commission pipeline, so you can see commissions flow without a provider: a new sandbox customer referred to the partner, `months` (default 3) of subscription payments at `priceMinor`, then for `scenario: "refund"` a half refund of the first invoice or for `churn` a cancellation. Returns the customer and what was created. Audited.
+    /// Generates deterministic billing history through the real commission pipeline, so you can see commissions flow without a provider: a new sandbox customer referred to the partner, `months` (default 3) of subscription payments at `priceMinor`, then for `scenario: "refund"` a half refund of the first invoice or for `churn` a cancellation. Returns the customer and what was created. `scenario: "signup_and_pay"` (test mode only, `409 test_mode_only` otherwise) proves the whole loop instead: a sign-up of `customerRef` (default a new `cus_sandbox_…`) referred by `partnerId` (a click on their link) or by `code` (a link or coupon code), filed through auth connection `authConnectionId` exactly as its signed `POST /v1/auth/connections/{id}/signups` would file it (auto-enroll included) or, without one, as `POST /v1/referrals/associate`; then a provider-neutral `payment.paid` of `amountMinor` (default 4900) in `currency` (default USD) through billing connection `billingConnectionId` (default the org's only active one, else `409`), run through the same pipeline as `POST /v1/sandbox/billing-fixtures`. Answers `{ scenario, ok, steps: [signup, payment], commissions }`; a step that could not succeed answers `ok: false` with `notes` saying why (sign-up not credited, auth connection paused or in another program, billing connection `awaiting_secret`, paused or limited to other programs, payment ignored, program without a commission rule) rather than an error. Audited.
     ///
     /// **Auth:** an API key with `billing:write`, or a session with role `owner`, `admin`.
     ///
@@ -5419,6 +5525,15 @@ extension ReferalliClient {
         return try await send("POST", "/v1/zapier/hooks", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
+    /// Set a connection's allowed origins (signed protocol). PUT /v1/auth/connections/{id}/origins
+    ///
+    /// The `origins` capability: the auth platform replaces this connection's own `allowedOrigins` (the browser origins that may call `POST /v1/widget/session`) when its app's origins change. Exact origins only (`https://app.example.com`, no path or wildcard; `http` only for localhost), at most 50; the body takes nothing else. Returns `{ id, allowedOrigins }`. Audited. A connection-signed `PATCH /v1/auth/connections/{id}` with the same body does the same. Signed with the connection secret in `x-referalli-signature: t=<unix>,v1=…,v2=…` (v2 also signs the request line; once a connection has seen v2 it requires it), with a unique `x-referalli-id` per call. The legacy header names from before the rename are also accepted, for existing integrations. Calls older than 5 minutes, reused ids (`409 replay`), paused connections (`423 connection_paused`) and unknown fields (`422`) are refused.
+    ///
+    /// **Auth:** none.
+    public func putAuthConnectionsIdOrigins(id: String, _ body: PutAuthConnectionsIdOriginsBody, idempotencyKey: String? = nil) async throws -> PutAuthConnectionsIdOriginsResponse {
+        return try await send("PUT", "/v1/auth/connections/\(Self.segment(id))/origins", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
     /// Set a vendor-issued secret. PUT /v1/auth/connections/{id}/secret
     ///
     /// For webhook connectors whose vendor issues the signing secret (Clerk, Stytch, WorkOS) or key set (Kinde's JWKS document): replaces the connection's secret. The previous one keeps verifying for 24 hours. Signed-protocol connections rotate instead. Audited.
@@ -5428,6 +5543,17 @@ extension ReferalliClient {
     /// **Scopes:** `integrations:write`, `connections:write`, `full`, `admin`.
     public func putAuthConnectionsIdSecret(id: String, _ body: PutAuthConnectionsIdSecretBody, idempotencyKey: String? = nil) async throws -> PutAuthConnectionsIdSecretResponse {
         return try await send("PUT", "/v1/auth/connections/\(Self.segment(id))/secret", query: [], body: body, idempotencyKey: idempotencyKey)
+    }
+
+    /// Set a billing account's owner. PUT /v1/billing/accounts/{accountRef}/owner
+    ///
+    /// For products that bill an organization (a team, a workspace) rather than a person. `accountRef` is the id your billing events carry for the organization (the `customerRef` of a generic event, or the metadata value a connection's `customerRefMetadataKey` reads, e.g. `organization_id`); `ownerCustomerRef` is the user whose referral its payments earn for. From then on the account's payments earn for the owner's referral (unless a referral is filed under the account itself). The first owner set replays the account's earlier payments for that owner's referral. Changing the owner re-points the account's provider customers, so later payments earn for the new owner's referral; payments made before the change stay with the previous owner's referral. When the organization's id changed, call it under the new id with `previousAccountRef` (the old one) instead of, or as well as, `ownerCustomerRef`: the old id then follows the new one (payments still arriving under it earn for the new id's owner), and the owner carries over unless named. Returns `{ accountRef, ownerCustomerRef, previousOwnerCustomerRef, renamedFrom, deleted, changed, relinked, reprocessedPayments }`; the same call again answers `changed: false`. Publishes `billing_account.owner_changed`. Auth platforms with the `accounts` capability (Atlas) send this for you through `POST /v1/auth/connections/{id}/accounts`. Needs `billing:write`. Audited.
+    ///
+    /// **Auth:** an API key with `billing:write`, or a session with role `owner`, `admin`.
+    ///
+    /// **Scopes:** `billing:write`, `full`, `admin`.
+    public func putBillingAccountsAccountRefOwner(accountRef: String, _ body: PutBillingAccountsAccountRefOwnerBody, idempotencyKey: String? = nil) async throws -> PutBillingAccountsAccountRefOwnerResponse {
+        return try await send("PUT", "/v1/billing/accounts/\(Self.segment(accountRef))/owner", query: [], body: body, idempotencyKey: idempotencyKey)
     }
 
     /// Set provider API credentials. PUT /v1/billing/connections/{id}/credentials
@@ -5924,6 +6050,8 @@ extension ReferalliClient {
             return try Self.encode(try await deleteAssetsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteAuthConnectionsId":
             return try Self.encode(try await deleteAuthConnectionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
+        case "deleteBillingAccountsAccountRef":
+            return try Self.encode(try await deleteBillingAccountsAccountRef(accountRef: path["accountRef"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteBillingConnectionsId":
             return try Self.encode(try await deleteBillingConnectionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "deleteBillingInternalCustomersCustomerRef":
@@ -6000,6 +6128,8 @@ extension ReferalliClient {
             return try Self.encode(try await getAuditLogs(actor: Self.queryString(query["actor"]), actorType: Self.queryString(query["actorType"]), action: Self.queryString(query["action"]), subjectType: Self.queryString(query["subjectType"]), subjectId: Self.queryString(query["subjectId"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), idempotencyKey: idempotencyKey))
         case "getAuthConnections":
             return try Self.encode(try await getAuthConnections(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+        case "getAuthConnectionsId":
+            return try Self.encode(try await getAuthConnectionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "getAuthConnectionsIdExport":
             return try Self.encode(try await getAuthConnectionsIdExport(id: path["id"] ?? "", customerRef: Self.queryString(query["customerRef"]) ?? "", idempotencyKey: idempotencyKey))
         case "getAuthConnectionsIdUsersCustomerRefReferral":
@@ -6008,6 +6138,8 @@ extension ReferalliClient {
             return try Self.encode(try await getAuthConnectionsProviders(idempotencyKey: idempotencyKey))
         case "getAuthProviders":
             return try Self.encode(try await getAuthProviders(idempotencyKey: idempotencyKey))
+        case "getBillingAccountsAccountRef":
+            return try Self.encode(try await getBillingAccountsAccountRef(accountRef: path["accountRef"] ?? "", idempotencyKey: idempotencyKey))
         case "getBillingConnections":
             return try Self.encode(try await getBillingConnections(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getBillingConnectionsId":
@@ -6041,7 +6173,7 @@ extension ReferalliClient {
         case "getCommissionRules":
             return try Self.encode(try await getCommissionRules(programId: Self.queryString(query["programId"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getCommissions":
-            return try Self.encode(try await getCommissions(partnerId: Self.queryString(query["partnerId"]), programId: Self.queryString(query["programId"]), type: Self.queryString(query["type"]), referralId: Self.queryString(query["referralId"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+            return try Self.encode(try await getCommissions(partnerId: Self.queryString(query["partnerId"]), programId: Self.queryString(query["programId"]), type: Self.queryString(query["type"]), referralId: Self.queryString(query["referralId"]), customerRef: Self.queryString(query["customerRef"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getCommissionsId":
             return try Self.encode(try await getCommissionsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "getContracts":
@@ -6142,6 +6274,8 @@ extension ReferalliClient {
             return try Self.encode(try await getOrgTaxProfile(idempotencyKey: idempotencyKey))
         case "getOrgTrackingConsent":
             return try Self.encode(try await getOrgTrackingConsent(idempotencyKey: idempotencyKey))
+        case "getOrgTrackingTokens":
+            return try Self.encode(try await getOrgTrackingTokens(idempotencyKey: idempotencyKey))
         case "getOutreach":
             return try Self.encode(try await getOutreach(limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getPartnerAchievements":
@@ -6270,6 +6404,8 @@ extension ReferalliClient {
             return try Self.encode(try await getProfitabilitySettings(programId: Self.queryString(query["programId"]), idempotencyKey: idempotencyKey))
         case "getPrograms":
             return try Self.encode(try await getPrograms(slug: Self.queryString(query["slug"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
+        case "getProgramsHandleAvailability":
+            return try Self.encode(try await getProgramsHandleAvailability(handle: Self.queryString(query["handle"]) ?? "", idempotencyKey: idempotencyKey))
         case "getProgramsId":
             return try Self.encode(try await getProgramsId(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "getProgramsIdAutopricing":
@@ -6295,13 +6431,13 @@ extension ReferalliClient {
         case "getProgramsIdStripeCreditsLog":
             return try Self.encode(try await getProgramsIdStripeCreditsLog(id: path["id"] ?? "", limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getProgramsIdTerms":
-            return try Self.encode(try await getProgramsIdTerms(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
+            return try Self.encode(try await getProgramsIdTerms(id: path["id"] ?? "", locale: Self.queryString(query["locale"]), idempotencyKey: idempotencyKey))
         case "getProgramsIdTermsAcceptances":
             return try Self.encode(try await getProgramsIdTermsAcceptances(id: path["id"] ?? "", limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getProspects":
             return try Self.encode(try await getProspects(status: Self.queryString(query["status"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getPublicProgramsHandle":
-            return try Self.encode(try await getPublicProgramsHandle(handle: path["handle"] ?? "", idempotencyKey: idempotencyKey))
+            return try Self.encode(try await getPublicProgramsHandle(handle: path["handle"] ?? "", locale: Self.queryString(query["locale"]), idempotencyKey: idempotencyKey))
         case "getReferrals":
             return try Self.encode(try await getReferrals(programId: Self.queryString(query["programId"]), partnerId: Self.queryString(query["partnerId"]), status: Self.queryString(query["status"]), customerRef: Self.queryString(query["customerRef"]), limit: Self.queryInt(query["limit"]), startingAfter: Self.queryString(query["starting_after"]), endingBefore: Self.queryString(query["ending_before"]), createdGte: Self.queryString(query["created[gte]"]), createdLte: Self.queryString(query["created[lte]"]), idempotencyKey: idempotencyKey))
         case "getReferralsId":
@@ -6396,6 +6532,8 @@ extension ReferalliClient {
             return try Self.encode(try await patchApiKeysId(id: path["id"] ?? "", try Self.decode(PatchApiKeysIdBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "patchAuthConnectionsId":
             return try Self.encode(try await patchAuthConnectionsId(id: path["id"] ?? "", try Self.decode(PatchAuthConnectionsIdBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "patchAuthConnectionsIdOrigins":
+            return try Self.encode(try await patchAuthConnectionsIdOrigins(id: path["id"] ?? "", try Self.decode(PatchAuthConnectionsIdOriginsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "patchBillingConnectionsId":
             return try Self.encode(try await patchBillingConnectionsId(id: path["id"] ?? "", try Self.decode(PatchBillingConnectionsIdBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "patchOrg":
@@ -6450,6 +6588,8 @@ extension ReferalliClient {
             return try Self.encode(try await postAuthBackchannelLogout(try Self.decode(PostAuthBackchannelLogoutBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnections":
             return try Self.encode(try await postAuthConnections(try Self.decode(PostAuthConnectionsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postAuthConnectionsIdAccounts":
+            return try Self.encode(try await postAuthConnectionsIdAccounts(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdAccountsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdAliases":
             return try Self.encode(try await postAuthConnectionsIdAliases(id: path["id"] ?? "", try Self.decode(PostAuthConnectionsIdAliasesBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postAuthConnectionsIdErase":
@@ -6480,10 +6620,14 @@ extension ReferalliClient {
             return try Self.encode(try await postBillingCheckout(try Self.decode(PostBillingCheckoutBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postBillingConnections":
             return try Self.encode(try await postBillingConnections(try Self.decode(PostBillingConnectionsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postBillingConnectionsIdEvents":
+            return try Self.encode(try await postBillingConnectionsIdEvents(id: path["id"] ?? "", try Self.decode(PostBillingConnectionsIdEventsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postBillingConnectionsIdRotateSecret":
             return try Self.encode(try await postBillingConnectionsIdRotateSecret(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postBillingConnectionsIdValueMappingPreview":
             return try Self.encode(try await postBillingConnectionsIdValueMappingPreview(id: path["id"] ?? "", try Self.decode(PostBillingConnectionsIdValueMappingPreviewBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postBillingEventsIdRelease":
+            return try Self.encode(try await postBillingEventsIdRelease(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postBillingInternalCustomers":
             return try Self.encode(try await postBillingInternalCustomers(try Self.decode(PostBillingInternalCustomersBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postBillingPortal":
@@ -6712,6 +6856,8 @@ extension ReferalliClient {
             return try Self.encode(try await postQualityRecompute(idempotencyKey: idempotencyKey))
         case "postReferralsAssociate":
             return try Self.encode(try await postReferralsAssociate(try Self.decode(PostReferralsAssociateBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "postReferralsHandoffTokens":
+            return try Self.encode(try await postReferralsHandoffTokens(try Self.decode(PostReferralsHandoffTokensBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postReferralsIdApprove":
             return try Self.encode(try await postReferralsIdApprove(id: path["id"] ?? "", idempotencyKey: idempotencyKey))
         case "postReferralsIdReassign":
@@ -6770,8 +6916,12 @@ extension ReferalliClient {
             return try Self.encode(try await postZapierConversions(try Self.decode(PostZapierConversionsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "postZapierHooks":
             return try Self.encode(try await postZapierHooks(try Self.decode(PostZapierHooksBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putAuthConnectionsIdOrigins":
+            return try Self.encode(try await putAuthConnectionsIdOrigins(id: path["id"] ?? "", try Self.decode(PutAuthConnectionsIdOriginsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putAuthConnectionsIdSecret":
             return try Self.encode(try await putAuthConnectionsIdSecret(id: path["id"] ?? "", try Self.decode(PutAuthConnectionsIdSecretBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
+        case "putBillingAccountsAccountRefOwner":
+            return try Self.encode(try await putBillingAccountsAccountRefOwner(accountRef: path["accountRef"] ?? "", try Self.decode(PutBillingAccountsAccountRefOwnerBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putBillingConnectionsIdCredentials":
             return try Self.encode(try await putBillingConnectionsIdCredentials(id: path["id"] ?? "", try Self.decode(PutBillingConnectionsIdCredentialsBody.self, from: body ?? .object([:])), idempotencyKey: idempotencyKey))
         case "putBillingConnectionsIdSecret":

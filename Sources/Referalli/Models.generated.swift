@@ -174,6 +174,8 @@ public struct ProgramSettings: Codable, Sendable, Equatable {
     public var allowPaidSearch: Bool
     public var challengeLinks: Bool
     public var settlement: String
+    /// How long before the referral a payment still earns, 0 to 1440. Default 5.
+    public var signupPaymentGraceMinutes: Int
     public var riskPolicy: ProgramSettingsRiskPolicy
     public var widget: ProgramSettingsWidget
     public var refereeReward: GetOpenapiJsonResponse?
@@ -188,13 +190,14 @@ public struct ProgramSettings: Codable, Sendable, Equatable {
         case allowPaidSearch = "allowPaidSearch"
         case challengeLinks = "challengeLinks"
         case settlement = "settlement"
+        case signupPaymentGraceMinutes = "signupPaymentGraceMinutes"
         case riskPolicy = "riskPolicy"
         case widget = "widget"
         case refereeReward = "refereeReward"
         case mobileApp = "mobileApp"
     }
 
-    public init(probabilisticPolicy: String, selfReferralPolicy: String, splitCommissions: Bool, utmTemplate: [String: String], allowPaidSearch: Bool, challengeLinks: Bool, settlement: String, riskPolicy: ProgramSettingsRiskPolicy, widget: ProgramSettingsWidget, refereeReward: GetOpenapiJsonResponse? = nil, mobileApp: ProgramSettingsMobileAppOption1? = nil) {
+    public init(probabilisticPolicy: String, selfReferralPolicy: String, splitCommissions: Bool, utmTemplate: [String: String], allowPaidSearch: Bool, challengeLinks: Bool, settlement: String, signupPaymentGraceMinutes: Int, riskPolicy: ProgramSettingsRiskPolicy, widget: ProgramSettingsWidget, refereeReward: GetOpenapiJsonResponse? = nil, mobileApp: ProgramSettingsMobileAppOption1? = nil) {
         self.probabilisticPolicy = probabilisticPolicy
         self.selfReferralPolicy = selfReferralPolicy
         self.splitCommissions = splitCommissions
@@ -202,6 +205,7 @@ public struct ProgramSettings: Codable, Sendable, Equatable {
         self.allowPaidSearch = allowPaidSearch
         self.challengeLinks = challengeLinks
         self.settlement = settlement
+        self.signupPaymentGraceMinutes = signupPaymentGraceMinutes
         self.riskPolicy = riskPolicy
         self.widget = widget
         self.refereeReward = refereeReward
@@ -515,6 +519,7 @@ public struct AttributionReasoning: Codable, Sendable, Equatable {
     public var consideredTouchpoints: Int?
     public var windowDays: Int?
     public var notes: [String]?
+    /// The attribution engine's codes behind `notes`, on stored referrals. Not the same list as the signed signups call's `reasoning.codes` (SignupReasonCode).
     public var noteCodes: [ReasonNote]?
 
     enum CodingKeys: String, CodingKey {
@@ -677,6 +682,7 @@ public struct AssociateResponseReferralOption1: Codable, Sendable, Equatable {
     }
 }
 
+/// Why a partner was skipped or the referral held, in English (no codes here). The matched referral carries its own `reasoning.notes` and `reasoning.noteCodes`.
 public struct AssociateResponseReasoning: Codable, Sendable, Equatable {
     public var notes: [String]
 
@@ -692,6 +698,7 @@ public struct AssociateResponseReasoning: Codable, Sendable, Equatable {
 public struct AssociateResponse: Codable, Sendable, Equatable {
     /// null when no partner matched (not an error).
     public var referral: AssociateResponseReferralOption1?
+    /// Why a partner was skipped or the referral held, in English (no codes here). The matched referral carries its own `reasoning.notes` and `reasoning.noteCodes`.
     public var reasoning: AssociateResponseReasoning?
 
     enum CodingKeys: String, CodingKey {
@@ -702,6 +709,22 @@ public struct AssociateResponse: Codable, Sendable, Equatable {
     public init(referral: AssociateResponseReferralOption1? = nil, reasoning: AssociateResponseReasoning? = nil) {
         self.referral = referral
         self.reasoning = reasoning
+    }
+}
+
+public struct HandoffToken: Codable, Sendable, Equatable {
+    /// Opaque; keep it in your own session and pass it to `POST /v1/referrals/associate`.
+    public var handoffToken: String
+    public var expiresAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case handoffToken = "handoffToken"
+        case expiresAt = "expiresAt"
+    }
+
+    public init(handoffToken: String, expiresAt: String) {
+        self.handoffToken = handoffToken
+        self.expiresAt = expiresAt
     }
 }
 
@@ -960,15 +983,43 @@ public struct ProgramTermsRecurringOption3: Codable, Sendable, Equatable {
     }
 }
 
+/// The same sentence in each partner-portal locale.
 public struct ProgramTermsSummary: Codable, Sendable, Equatable {
     public var en: String
+    public var es: String
+    public var de: String
+    public var fr: String
+    public var pt: String
+    public var it: String
+    public var nl: String
+    public var sv: String
+    public var ja: String
+    public var zh: String
 
     enum CodingKeys: String, CodingKey {
         case en = "en"
+        case es = "es"
+        case de = "de"
+        case fr = "fr"
+        case pt = "pt"
+        case it = "it"
+        case nl = "nl"
+        case sv = "sv"
+        case ja = "ja"
+        case zh = "zh"
     }
 
-    public init(en: String) {
+    public init(en: String, es: String, de: String, fr: String, pt: String, it: String, nl: String, sv: String, ja: String, zh: String) {
         self.en = en
+        self.es = es
+        self.de = de
+        self.fr = fr
+        self.pt = pt
+        self.it = it
+        self.nl = nl
+        self.sv = sv
+        self.ja = ja
+        self.zh = zh
     }
 }
 
@@ -981,7 +1032,12 @@ public struct ProgramTerms: Codable, Sendable, Equatable {
     public var holdDays: Int
     /// Overrides, tiers or new-vs-expansion rates can change the rate a partner earns.
     public var ratesVary: Bool
+    /// The same sentence in each partner-portal locale.
     public var summary: ProgramTermsSummary
+    /// With `?locale=` or `Accept-Language`: the locale chosen (`en` when the one asked for is not supported).
+    public var locale: String?
+    /// With `?locale=` or `Accept-Language`: the summary in `locale`.
+    public var text: String?
 
     enum CodingKeys: String, CodingKey {
         case programId = "programId"
@@ -991,9 +1047,11 @@ public struct ProgramTerms: Codable, Sendable, Equatable {
         case holdDays = "holdDays"
         case ratesVary = "ratesVary"
         case summary = "summary"
+        case locale = "locale"
+        case text = "text"
     }
 
-    public init(programId: String, ruleVersion: Int, base: JSONValue, recurring: JSONValue, holdDays: Int, ratesVary: Bool, summary: ProgramTermsSummary) {
+    public init(programId: String, ruleVersion: Int, base: JSONValue, recurring: JSONValue, holdDays: Int, ratesVary: Bool, summary: ProgramTermsSummary, locale: String? = nil, text: String? = nil) {
         self.programId = programId
         self.ruleVersion = ruleVersion
         self.base = base
@@ -1001,6 +1059,8 @@ public struct ProgramTerms: Codable, Sendable, Equatable {
         self.holdDays = holdDays
         self.ratesVary = ratesVary
         self.summary = summary
+        self.locale = locale
+        self.text = text
     }
 }
 
@@ -1301,6 +1361,8 @@ public struct BillingConnection: Codable, Sendable, Equatable {
     public var hasCredentials: Bool
     /// Where cash / credit / discount / cost live in this connection's payload; null uses the built-in extractor.
     public var valueMapping: ValueMapping?
+    /// A payment above this is held for release. null: the default, 1,000,000,000 minor units.
+    public var maxAmountMinor: Int?
     /// Only matching events earn; the rest are recorded as ignored_by_filter. null takes every event.
     public var filter: BillingFilter?
     /// The provider metadata key that holds your customerRef, when it is not referalli_customer_ref.
@@ -1322,6 +1384,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case needsCredentials = "needsCredentials"
         case hasCredentials = "hasCredentials"
         case valueMapping = "valueMapping"
+        case maxAmountMinor = "maxAmountMinor"
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
         case stripeWebhookEndpointId = "stripeWebhookEndpointId"
@@ -1329,7 +1392,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         case rotation = "rotation"
     }
 
-    public init(id: String, provider: String, name: String, status: String, programIds: [String]? = nil, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, stripeWebhookEndpointId: String? = nil, providerWebhookIds: [String]? = nil, rotation: BillingConnectionRotation) {
+    public init(id: String, provider: String, name: String, status: String, programIds: [String]? = nil, createdAt: String, webhookUrl: String, needsCredentials: Bool, hasCredentials: Bool, valueMapping: ValueMapping? = nil, maxAmountMinor: Int? = nil, filter: BillingFilter? = nil, customerRefMetadataKey: String? = nil, stripeWebhookEndpointId: String? = nil, providerWebhookIds: [String]? = nil, rotation: BillingConnectionRotation) {
         self.id = id
         self.provider = provider
         self.name = name
@@ -1340,6 +1403,7 @@ public struct BillingConnection: Codable, Sendable, Equatable {
         self.needsCredentials = needsCredentials
         self.hasCredentials = hasCredentials
         self.valueMapping = valueMapping
+        self.maxAmountMinor = maxAmountMinor
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
         self.stripeWebhookEndpointId = stripeWebhookEndpointId
@@ -1418,8 +1482,10 @@ public struct BillingEvent: Codable, Sendable, Equatable {
     public var occurredAt: String
     public var connectionId: String?
     public var productRef: String
-    /// ignored_by_filter: recorded, never processed (product filter or internal customer).
+    /// held: a payment over the connection limit or dated in the future; it earns nothing until released with POST /v1/billing/events/{id}/release. ignored_by_filter: recorded, never processed (product filter or internal customer). parked: a refund or dispute waiting up to 7 days for its payment.
     public var status: String
+    /// When a parked event is dropped if its payment has not arrived. Null unless status is parked.
+    public var parkedUntil: String?
     /// Why it earned nothing. no_referral_in_scope (status processed): the customer is referred only in programs outside the connection's programIds. identity_unresolved / identity_ambiguous (status processed): the customer had no customerRef and an auth connection with resolveBillingCustomers matched no user, or several.
     public var ignoredReason: String?
     /// The productIds, priceIds and skus the event named.
@@ -1439,11 +1505,12 @@ public struct BillingEvent: Codable, Sendable, Equatable {
         case connectionId = "connectionId"
         case productRef = "productRef"
         case status = "status"
+        case parkedUntil = "parkedUntil"
         case ignoredReason = "ignoredReason"
         case catalog = "catalog"
     }
 
-    public init(id: String, provider: String, type: String, customerRef: String, invoiceRef: String? = nil, amountGross: Int, tax: Int, fees: Int, currency: String, occurredAt: String, connectionId: String? = nil, productRef: String, status: String, ignoredReason: String? = nil, catalog: [String: [String]]? = nil) {
+    public init(id: String, provider: String, type: String, customerRef: String, invoiceRef: String? = nil, amountGross: Int, tax: Int, fees: Int, currency: String, occurredAt: String, connectionId: String? = nil, productRef: String, status: String, parkedUntil: String? = nil, ignoredReason: String? = nil, catalog: [String: [String]]? = nil) {
         self.id = id
         self.provider = provider
         self.type = type
@@ -1457,6 +1524,7 @@ public struct BillingEvent: Codable, Sendable, Equatable {
         self.connectionId = connectionId
         self.productRef = productRef
         self.status = status
+        self.parkedUntil = parkedUntil
         self.ignoredReason = ignoredReason
         self.catalog = catalog
     }
@@ -2265,6 +2333,79 @@ public struct Org: Codable, Sendable, Equatable {
     }
 }
 
+public struct TrackingTokensLive: Codable, Sendable, Equatable {
+    public var orgId: String
+    public var trackingToken: String
+    /// The aff.js URL for this mode.
+    public var scriptUrl: String
+    /// The org's verified link domain, else Referalli's public origin.
+    public var linkBaseUrl: String
+    /// A partner link, with `{code}` for the link code.
+    public var linkTemplate: String
+
+    enum CodingKeys: String, CodingKey {
+        case orgId = "orgId"
+        case trackingToken = "trackingToken"
+        case scriptUrl = "scriptUrl"
+        case linkBaseUrl = "linkBaseUrl"
+        case linkTemplate = "linkTemplate"
+    }
+
+    public init(orgId: String, trackingToken: String, scriptUrl: String, linkBaseUrl: String, linkTemplate: String) {
+        self.orgId = orgId
+        self.trackingToken = trackingToken
+        self.scriptUrl = scriptUrl
+        self.linkBaseUrl = linkBaseUrl
+        self.linkTemplate = linkTemplate
+    }
+}
+
+public struct TrackingTokensTest: Codable, Sendable, Equatable {
+    public var orgId: String
+    public var trackingToken: String
+    /// The aff.js URL for this mode.
+    public var scriptUrl: String
+    /// The org's verified link domain, else Referalli's public origin.
+    public var linkBaseUrl: String
+    /// A partner link, with `{code}` for the link code.
+    public var linkTemplate: String
+
+    enum CodingKeys: String, CodingKey {
+        case orgId = "orgId"
+        case trackingToken = "trackingToken"
+        case scriptUrl = "scriptUrl"
+        case linkBaseUrl = "linkBaseUrl"
+        case linkTemplate = "linkTemplate"
+    }
+
+    public init(orgId: String, trackingToken: String, scriptUrl: String, linkBaseUrl: String, linkTemplate: String) {
+        self.orgId = orgId
+        self.trackingToken = trackingToken
+        self.scriptUrl = scriptUrl
+        self.linkBaseUrl = linkBaseUrl
+        self.linkTemplate = linkTemplate
+    }
+}
+
+public struct TrackingTokens: Codable, Sendable, Equatable {
+    /// The caller's mode (the key's, or the session's referalli-mode).
+    public var mode: String
+    public var live: TrackingTokensLive
+    public var test: TrackingTokensTest
+
+    enum CodingKeys: String, CodingKey {
+        case mode = "mode"
+        case live = "live"
+        case test = "test"
+    }
+
+    public init(mode: String, live: TrackingTokensLive, test: TrackingTokensTest) {
+        self.mode = mode
+        self.live = live
+        self.test = test
+    }
+}
+
 public struct Member: Codable, Sendable, Equatable {
     public var userId: String
     public var role: String
@@ -2507,6 +2648,24 @@ public struct WidgetSession: Codable, Sendable, Equatable {
     }
 }
 
+public struct AuthConnectionLastErrorOption1: Codable, Sendable, Equatable {
+    public var at: String
+    public var code: String
+    public var message: String
+
+    enum CodingKeys: String, CodingKey {
+        case at = "at"
+        case code = "code"
+        case message = "message"
+    }
+
+    public init(at: String, code: String, message: String) {
+        self.at = at
+        self.code = code
+        self.message = message
+    }
+}
+
 public struct AuthConnectionRotation: Codable, Sendable, Equatable {
     public var inProgress: Bool
     public var previousSecretExpiresAt: String?
@@ -2529,7 +2688,13 @@ public struct AuthConnection: Codable, Sendable, Equatable {
     public var name: String
     public var status: String
     public var createdAt: String
+    /// When the connection last filed a new sign-up (its signedUpAt); null when never. Webhook connections count only sign-ups that carried referral context; test sign-ups never count.
+    public var lastSignupAt: String?
+    /// The last inbound call (sign-up, partner, account…) this connection refused after its signature checked out, such as a body with fields the endpoint does not take. Compare `at` with `lastSignupAt`: a newer error means sign-ups are failing. Null when none.
+    public var lastError: AuthConnectionLastErrorOption1?
     public var rotation: AuthConnectionRotation
+    /// A program-scoped key made this connection, so its signed calls (erase, export and the rest) reach only its own program.
+    public var programBound: Bool?
     /// Signed-protocol connections: the Atlas instance, or a custom label.
     public var instanceId: String?
     /// Atlas connections serving an Atlas ID app instead of an instance.
@@ -2552,7 +2717,10 @@ public struct AuthConnection: Codable, Sendable, Equatable {
         case name = "name"
         case status = "status"
         case createdAt = "createdAt"
+        case lastSignupAt = "lastSignupAt"
+        case lastError = "lastError"
         case rotation = "rotation"
+        case programBound = "programBound"
         case instanceId = "instanceId"
         case appId = "appId"
         case autoEnrollUsers = "autoEnrollUsers"
@@ -2564,14 +2732,17 @@ public struct AuthConnection: Codable, Sendable, Equatable {
         case allowedOrigins = "allowedOrigins"
     }
 
-    public init(id: String, provider: String, programId: String, name: String, status: String, createdAt: String, rotation: AuthConnectionRotation, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, resolveBillingCustomers: Bool? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
+    public init(id: String, provider: String, programId: String, name: String, status: String, createdAt: String, lastSignupAt: String? = nil, lastError: AuthConnectionLastErrorOption1? = nil, rotation: AuthConnectionRotation, programBound: Bool? = nil, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, resolveBillingCustomers: Bool? = nil, signatureVersion: String? = nil, requiresV2: Bool? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
         self.id = id
         self.provider = provider
         self.programId = programId
         self.name = name
         self.status = status
         self.createdAt = createdAt
+        self.lastSignupAt = lastSignupAt
+        self.lastError = lastError
         self.rotation = rotation
+        self.programBound = programBound
         self.instanceId = instanceId
         self.appId = appId
         self.autoEnrollUsers = autoEnrollUsers
@@ -2596,6 +2767,8 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
     public var metadataKeys: [String: String]?
     /// Signed-protocol connections (atlas, custom).
     public var programId: String?
+    /// Made by a program-scoped key: signed calls reach only this program.
+    public var programBound: Bool?
     public var instanceId: String?
     public var appId: String?
     public var autoEnrollUsers: Bool?
@@ -2615,6 +2788,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case docsUrl = "docsUrl"
         case metadataKeys = "metadataKeys"
         case programId = "programId"
+        case programBound = "programBound"
         case instanceId = "instanceId"
         case appId = "appId"
         case autoEnrollUsers = "autoEnrollUsers"
@@ -2626,7 +2800,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         case allowedOrigins = "allowedOrigins"
     }
 
-    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
+    public init(id: String, provider: String, secret: String, webhookUrl: String? = nil, docsUrl: String? = nil, metadataKeys: [String: String]? = nil, programId: String? = nil, programBound: Bool? = nil, instanceId: String? = nil, appId: String? = nil, autoEnrollUsers: Bool? = nil, destinationUrl: String? = nil, signupsUrl: String? = nil, eraseUrl: String? = nil, exportUrl: String? = nil, tokenVerification: TokenVerification? = nil, allowedOrigins: [String]? = nil) {
         self.id = id
         self.provider = provider
         self.secret = secret
@@ -2634,6 +2808,7 @@ public struct CreatedAuthConnection: Codable, Sendable, Equatable {
         self.docsUrl = docsUrl
         self.metadataKeys = metadataKeys
         self.programId = programId
+        self.programBound = programBound
         self.instanceId = instanceId
         self.appId = appId
         self.autoEnrollUsers = autoEnrollUsers
@@ -3942,15 +4117,18 @@ public struct RoiGrant: Codable, Sendable, Equatable {
 
 public struct RoiPatternEntrySubject: Codable, Sendable, Equatable {
     public var customerRef: String?
+    public var customerRefHash: String?
     public var partnerId: String?
 
     enum CodingKeys: String, CodingKey {
         case customerRef = "customerRef"
+        case customerRefHash = "customerRefHash"
         case partnerId = "partnerId"
     }
 
-    public init(customerRef: String? = nil, partnerId: String? = nil) {
+    public init(customerRef: String? = nil, customerRefHash: String? = nil, partnerId: String? = nil) {
         self.customerRef = customerRef
+        self.customerRefHash = customerRefHash
         self.partnerId = partnerId
     }
 }
@@ -4830,6 +5008,61 @@ public struct CustomerAliasedEvent: Codable, Sendable, Equatable {
     }
 
     public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: CustomerAliasedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `billing_account.owner_changed` event: An organization the app bills under has a new owner, a new id (`previousAccountRef` is the old one) or was deleted (`deleted`, no owner), set with `PUT /v1/billing/accounts/{accountRef}/owner`, `DELETE /v1/billing/accounts/{accountRef}` or by an auth platform. Its payments earn for `ownerCustomerRef`'s referral.
+public struct BillingAccountOwnerChangedEventData: Codable, Sendable, Equatable {
+    public var accountRef: String
+    public var ownerCustomerRef: String?
+    public var previousOwnerCustomerRef: String?
+    public var previousAccountRef: String?
+    public var deleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case accountRef = "accountRef"
+        case ownerCustomerRef = "ownerCustomerRef"
+        case previousOwnerCustomerRef = "previousOwnerCustomerRef"
+        case previousAccountRef = "previousAccountRef"
+        case deleted = "deleted"
+    }
+
+    public init(accountRef: String, ownerCustomerRef: String? = nil, previousOwnerCustomerRef: String? = nil, previousAccountRef: String? = nil, deleted: Bool) {
+        self.accountRef = accountRef
+        self.ownerCustomerRef = ownerCustomerRef
+        self.previousOwnerCustomerRef = previousOwnerCustomerRef
+        self.previousAccountRef = previousAccountRef
+        self.deleted = deleted
+    }
+}
+
+/// A billing account's owner changed: the `billing_account.owner_changed` delivery body.
+public struct BillingAccountOwnerChangedEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: BillingAccountOwnerChangedEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: BillingAccountOwnerChangedEventData) {
         self.id = id
         self.topic = topic
         self.orgId = orgId
@@ -5800,6 +6033,131 @@ public struct BillingEventRecordedEvent: Codable, Sendable, Equatable {
     }
 
     public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: BillingEventRecordedEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `billing_event.held` event: A payment over its connection's `maxAmountMinor`, or dated more than a day ahead, earned nothing and waits for POST /v1/billing/events/{id}/release.
+public struct BillingEventHeldEventData: Codable, Sendable, Equatable {
+    /// The payment.
+    public var billingEventId: String
+    public var reason: String
+    public var customerRef: String
+    public var invoiceRef: String
+    /// Lowercase ISO 4217 code.
+    public var currency: String
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+
+    enum CodingKeys: String, CodingKey {
+        case billingEventId = "billingEventId"
+        case reason = "reason"
+        case customerRef = "customerRef"
+        case invoiceRef = "invoiceRef"
+        case currency = "currency"
+        case amountMinor = "amountMinor"
+    }
+
+    public init(billingEventId: String, reason: String, customerRef: String, invoiceRef: String, currency: String, amountMinor: Int) {
+        self.billingEventId = billingEventId
+        self.reason = reason
+        self.customerRef = customerRef
+        self.invoiceRef = invoiceRef
+        self.currency = currency
+        self.amountMinor = amountMinor
+    }
+}
+
+/// A payment was held for review: the `billing_event.held` delivery body.
+public struct BillingEventHeldEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: BillingEventHeldEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: BillingEventHeldEventData) {
+        self.id = id
+        self.topic = topic
+        self.orgId = orgId
+        self.livemode = livemode
+        self.createdAt = createdAt
+        self.data = data
+    }
+}
+
+/// `data` of a `billing_event.expired` event: A refund or dispute waited 7 days for a payment that never arrived, and reversed nothing. A payment arriving later earns in full; adjust it by hand if the refund still applies.
+public struct BillingEventExpiredEventData: Codable, Sendable, Equatable {
+    /// The refund or dispute.
+    public var billingEventId: String
+    public var type: String
+    public var customerRef: String
+    public var invoiceRef: String?
+    public var chargeRef: String?
+    /// Lowercase ISO 4217 code.
+    public var currency: String
+    /// Integer minor units (cents).
+    public var amountMinor: Int
+
+    enum CodingKeys: String, CodingKey {
+        case billingEventId = "billingEventId"
+        case type = "type"
+        case customerRef = "customerRef"
+        case invoiceRef = "invoiceRef"
+        case chargeRef = "chargeRef"
+        case currency = "currency"
+        case amountMinor = "amountMinor"
+    }
+
+    public init(billingEventId: String, type: String, customerRef: String, invoiceRef: String? = nil, chargeRef: String? = nil, currency: String, amountMinor: Int) {
+        self.billingEventId = billingEventId
+        self.type = type
+        self.customerRef = customerRef
+        self.invoiceRef = invoiceRef
+        self.chargeRef = chargeRef
+        self.currency = currency
+        self.amountMinor = amountMinor
+    }
+}
+
+/// A parked refund or dispute expired: the `billing_event.expired` delivery body.
+public struct BillingEventExpiredEvent: Codable, Sendable, Equatable {
+    /// The event id (`evt_…`); the same event delivered to several endpoints has the same id.
+    public var id: String
+    public var topic: String
+    public var orgId: String
+    /// false for events from test mode.
+    public var livemode: Bool
+    public var createdAt: String
+    public var data: BillingEventExpiredEventData
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case topic = "topic"
+        case orgId = "orgId"
+        case livemode = "livemode"
+        case createdAt = "createdAt"
+        case data = "data"
+    }
+
+    public init(id: String, topic: String, orgId: String, livemode: Bool, createdAt: String, data: BillingEventExpiredEventData) {
         self.id = id
         self.topic = topic
         self.orgId = orgId
@@ -6958,6 +7316,30 @@ public struct WebhookEndpointRecoveredEvent: Codable, Sendable, Equatable {
         self.livemode = livemode
         self.createdAt = createdAt
         self.data = data
+    }
+}
+
+public struct GetTOrgTokenConfigJsonResponse: Codable, Sendable, Equatable {
+    /// How long aff.js keeps the context, in days (1 to 400): the default it is served with.
+    public var cookieWindowDays: Int
+    public var cookieName: String
+    /// The pre-rename cookie name, written alongside until 2027-01-31.
+    public var legacyCookieName: String
+    /// localStorage keys aff.js writes (same names and value as the cookies).
+    public var storageKeys: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case cookieWindowDays = "cookieWindowDays"
+        case cookieName = "cookieName"
+        case legacyCookieName = "legacyCookieName"
+        case storageKeys = "storageKeys"
+    }
+
+    public init(cookieWindowDays: Int, cookieName: String, legacyCookieName: String, storageKeys: [String]) {
+        self.cookieWindowDays = cookieWindowDays
+        self.cookieName = cookieName
+        self.legacyCookieName = legacyCookieName
+        self.storageKeys = storageKeys
     }
 }
 
@@ -8618,6 +9000,25 @@ public struct GetOrgReferralParamsResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct GetProgramsHandleAvailabilityResponse: Codable, Sendable, Equatable {
+    public var handle: String
+    public var available: Bool
+    /// `invalid`: not 3 to 48 of a-z, 0-9 and `-`; `taken`: another program (in any org) has it.
+    public var reason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case handle = "handle"
+        case available = "available"
+        case reason = "reason"
+    }
+
+    public init(handle: String, available: Bool, reason: String? = nil) {
+        self.handle = handle
+        self.available = available
+        self.reason = reason
+    }
+}
+
 public struct GetProgramsResponse: Codable, Sendable, Equatable {
     public var object: String
     public var data: [Program]
@@ -9823,6 +10224,81 @@ public struct GetBillingConnectionsResponse: Codable, Sendable, Equatable {
     }
 }
 
+public struct PostBillingConnectionsIdEventsResponse: Codable, Sendable, Equatable {
+    public var received: Int
+    public var results: [PostBillingEventsIdReleaseResponse]
+
+    enum CodingKeys: String, CodingKey {
+        case received = "received"
+        case results = "results"
+    }
+
+    public init(received: Int, results: [PostBillingEventsIdReleaseResponse]) {
+        self.received = received
+        self.results = results
+    }
+}
+
+public struct PutBillingAccountsAccountRefOwnerResponse: Codable, Sendable, Equatable {
+    public var accountRef: String
+    /// Null after a deletion (or a rename of an account with no owner).
+    public var ownerCustomerRef: String?
+    public var previousOwnerCustomerRef: String?
+    public var changed: Bool
+    public var relinked: Int
+    public var reprocessedPayments: Int
+    /// The previous id, on a rename.
+    public var renamedFrom: String?
+    public var deleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case accountRef = "accountRef"
+        case ownerCustomerRef = "ownerCustomerRef"
+        case previousOwnerCustomerRef = "previousOwnerCustomerRef"
+        case changed = "changed"
+        case relinked = "relinked"
+        case reprocessedPayments = "reprocessedPayments"
+        case renamedFrom = "renamedFrom"
+        case deleted = "deleted"
+    }
+
+    public init(accountRef: String, ownerCustomerRef: String? = nil, previousOwnerCustomerRef: String? = nil, changed: Bool, relinked: Int, reprocessedPayments: Int, renamedFrom: String? = nil, deleted: Bool) {
+        self.accountRef = accountRef
+        self.ownerCustomerRef = ownerCustomerRef
+        self.previousOwnerCustomerRef = previousOwnerCustomerRef
+        self.changed = changed
+        self.relinked = relinked
+        self.reprocessedPayments = reprocessedPayments
+        self.renamedFrom = renamedFrom
+        self.deleted = deleted
+    }
+}
+
+public struct GetBillingAccountsAccountRefResponse: Codable, Sendable, Equatable {
+    public var accountRef: String
+    public var ownerCustomerRef: String?
+    public var since: String
+    /// The id the account was renamed to; it follows that account.
+    public var renamedTo: String?
+    public var deleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case accountRef = "accountRef"
+        case ownerCustomerRef = "ownerCustomerRef"
+        case since = "since"
+        case renamedTo = "renamedTo"
+        case deleted = "deleted"
+    }
+
+    public init(accountRef: String, ownerCustomerRef: String? = nil, since: String, renamedTo: String? = nil, deleted: Bool) {
+        self.accountRef = accountRef
+        self.ownerCustomerRef = ownerCustomerRef
+        self.since = since
+        self.renamedTo = renamedTo
+        self.deleted = deleted
+    }
+}
+
 public struct PutBillingConnectionsIdValueMappingResponse: Codable, Sendable, Equatable {
     public var id: String
     public var valueMapping: ValueMapping
@@ -9895,6 +10371,38 @@ public struct GetBillingEventsResponse: Codable, Sendable, Equatable {
         self.data = data
         self.hasMore = hasMore
         self.nextCursor = nextCursor
+    }
+}
+
+public struct PostBillingEventsIdReleaseResponse: Codable, Sendable, Equatable {
+    public var duplicate: Bool
+    public var billingEventId: String?
+    public var conversions: Int
+    public var linesCreated: Int
+    public var reversals: Int
+    /// Recorded as ignored_by_filter: earned nothing.
+    public var ignored: String?
+    /// Recorded as held: earns nothing until released.
+    public var held: String?
+
+    enum CodingKeys: String, CodingKey {
+        case duplicate = "duplicate"
+        case billingEventId = "billingEventId"
+        case conversions = "conversions"
+        case linesCreated = "linesCreated"
+        case reversals = "reversals"
+        case ignored = "ignored"
+        case held = "held"
+    }
+
+    public init(duplicate: Bool, billingEventId: String? = nil, conversions: Int, linesCreated: Int, reversals: Int, ignored: String? = nil, held: String? = nil) {
+        self.duplicate = duplicate
+        self.billingEventId = billingEventId
+        self.conversions = conversions
+        self.linesCreated = linesCreated
+        self.reversals = reversals
+        self.ignored = ignored
+        self.held = held
     }
 }
 
@@ -12199,7 +12707,7 @@ public struct PostWebhookEndpointsIdReplayResponse: Codable, Sendable, Equatable
     }
 }
 
-public struct PostSandboxSimulateResponse: Codable, Sendable, Equatable {
+public struct PostSandboxSimulateResponseValueOption1: Codable, Sendable, Equatable {
     public var customerRef: String
     public var events: Int
     public var conversions: Int
@@ -12222,6 +12730,149 @@ public struct PostSandboxSimulateResponse: Codable, Sendable, Equatable {
         self.reversals = reversals
     }
 }
+
+public struct PostSandboxSimulateResponseValueOption2StepsItemOption1: Codable, Sendable, Equatable {
+    public var step: String
+    public var ok: Bool
+    public var via: String
+    public var customerRef: String
+    public var referralId: String?
+    public var partnerId: String?
+    /// Why the sign-up was not credited, when it was not.
+    public var notes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case step = "step"
+        case ok = "ok"
+        case via = "via"
+        case customerRef = "customerRef"
+        case referralId = "referralId"
+        case partnerId = "partnerId"
+        case notes = "notes"
+    }
+
+    public init(step: String, ok: Bool, via: String, customerRef: String, referralId: String? = nil, partnerId: String? = nil, notes: [String]) {
+        self.step = step
+        self.ok = ok
+        self.via = via
+        self.customerRef = customerRef
+        self.referralId = referralId
+        self.partnerId = partnerId
+        self.notes = notes
+    }
+}
+
+public struct PostSandboxSimulateResponseValueOption2StepsItemOption2ResultsItem: Codable, Sendable, Equatable {
+    public var duplicate: Bool
+    public var billingEventId: String?
+    public var conversions: Int
+    public var linesCreated: Int
+    public var reversals: Int
+    public var ignored: String?
+
+    enum CodingKeys: String, CodingKey {
+        case duplicate = "duplicate"
+        case billingEventId = "billingEventId"
+        case conversions = "conversions"
+        case linesCreated = "linesCreated"
+        case reversals = "reversals"
+        case ignored = "ignored"
+    }
+
+    public init(duplicate: Bool, billingEventId: String? = nil, conversions: Int, linesCreated: Int, reversals: Int, ignored: String? = nil) {
+        self.duplicate = duplicate
+        self.billingEventId = billingEventId
+        self.conversions = conversions
+        self.linesCreated = linesCreated
+        self.reversals = reversals
+        self.ignored = ignored
+    }
+}
+
+public struct PostSandboxSimulateResponseValueOption2StepsItemOption2: Codable, Sendable, Equatable {
+    public var step: String
+    public var ok: Bool
+    public var billingConnectionId: String
+    public var provider: String
+    /// The payment.paid event id; null when the step did not run.
+    public var eventId: String?
+    public var results: [PostSandboxSimulateResponseValueOption2StepsItemOption2ResultsItem]
+    /// Why the payment earned nothing (awaiting_secret, program mismatch, no rule…).
+    public var notes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case step = "step"
+        case ok = "ok"
+        case billingConnectionId = "billingConnectionId"
+        case provider = "provider"
+        case eventId = "eventId"
+        case results = "results"
+        case notes = "notes"
+    }
+
+    public init(step: String, ok: Bool, billingConnectionId: String, provider: String, eventId: String? = nil, results: [PostSandboxSimulateResponseValueOption2StepsItemOption2ResultsItem], notes: [String]) {
+        self.step = step
+        self.ok = ok
+        self.billingConnectionId = billingConnectionId
+        self.provider = provider
+        self.eventId = eventId
+        self.results = results
+        self.notes = notes
+    }
+}
+
+public struct PostSandboxSimulateResponseValueOption2CommissionsItem: Codable, Sendable, Equatable {
+    public var id: String
+    public var type: String
+    public var partnerId: String
+    public var amountMinor: Int
+    public var currency: String
+    public var relatedCommissionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case type = "type"
+        case partnerId = "partnerId"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
+        case relatedCommissionId = "relatedCommissionId"
+    }
+
+    public init(id: String, type: String, partnerId: String, amountMinor: Int, currency: String, relatedCommissionId: String? = nil) {
+        self.id = id
+        self.type = type
+        self.partnerId = partnerId
+        self.amountMinor = amountMinor
+        self.currency = currency
+        self.relatedCommissionId = relatedCommissionId
+    }
+}
+
+public struct PostSandboxSimulateResponseValueOption2: Codable, Sendable, Equatable {
+    public var scenario: String
+    /// Both steps succeeded: the sign-up was attributed and the payment earned a commission.
+    public var ok: Bool
+    /// The signup step, then the payment step.
+    public var steps: [JSONValue]
+    /// Commission events the fixture created (earned, reversed…).
+    public var commissions: [PostSandboxSimulateResponseValueOption2CommissionsItem]
+
+    enum CodingKeys: String, CodingKey {
+        case scenario = "scenario"
+        case ok = "ok"
+        case steps = "steps"
+        case commissions = "commissions"
+    }
+
+    public init(scenario: String, ok: Bool, steps: [JSONValue], commissions: [PostSandboxSimulateResponseValueOption2CommissionsItem]) {
+        self.scenario = scenario
+        self.ok = ok
+        self.steps = steps
+        self.commissions = commissions
+    }
+}
+
+public typealias PostSandboxSimulateResponse = JSONValue
 
 public struct GetSandboxBillingFixturesResponseDataItem: Codable, Sendable, Equatable {
     public var provider: String
@@ -15536,19 +16187,23 @@ public struct PostPrivacyForgetResponse: Codable, Sendable, Equatable {
     public var ok: Bool
     /// Erasure by customerRef.
     public var pseudonym: String?
+    /// True when this customerRef was erased by an earlier request: a retry succeeds.
+    public var alreadyErased: Bool?
     public var partners: [PostPrivacyForgetResponsePartnersItem]?
     public var customers: [PostPrivacyForgetResponseCustomersItem]?
 
     enum CodingKeys: String, CodingKey {
         case ok = "ok"
         case pseudonym = "pseudonym"
+        case alreadyErased = "alreadyErased"
         case partners = "partners"
         case customers = "customers"
     }
 
-    public init(ok: Bool, pseudonym: String? = nil, partners: [PostPrivacyForgetResponsePartnersItem]? = nil, customers: [PostPrivacyForgetResponseCustomersItem]? = nil) {
+    public init(ok: Bool, pseudonym: String? = nil, alreadyErased: Bool? = nil, partners: [PostPrivacyForgetResponsePartnersItem]? = nil, customers: [PostPrivacyForgetResponseCustomersItem]? = nil) {
         self.ok = ok
         self.pseudonym = pseudonym
+        self.alreadyErased = alreadyErased
         self.partners = partners
         self.customers = customers
     }
@@ -16311,16 +16966,22 @@ public struct GetAuthConnectionsIdExportResponse: Codable, Sendable, Equatable {
     }
 }
 
-/// What the connection takes beyond sign-ups: `partners` is user-chosen referral codes through `/partners`.
+/// What the connection takes beyond sign-ups: `partners` is user-chosen referral codes through `/partners`; `origins` is setting its own `allowedOrigins` through `PUT …/origins`; `accounts` is organization owners through `/accounts`.
 public struct PostAuthConnectionsIdPingResponseCapabilities: Codable, Sendable, Equatable {
     public var partners: Bool
+    public var origins: Bool
+    public var accounts: Bool
 
     enum CodingKeys: String, CodingKey {
         case partners = "partners"
+        case origins = "origins"
+        case accounts = "accounts"
     }
 
-    public init(partners: Bool) {
+    public init(partners: Bool, origins: Bool, accounts: Bool) {
         self.partners = partners
+        self.origins = origins
+        self.accounts = accounts
     }
 }
 
@@ -16331,7 +16992,7 @@ public struct PostAuthConnectionsIdPingResponse: Codable, Sendable, Equatable {
     public var orgName: String
     public var autoEnrollUsers: Bool
     public var serverTime: String
-    /// What the connection takes beyond sign-ups: `partners` is user-chosen referral codes through `/partners`.
+    /// What the connection takes beyond sign-ups: `partners` is user-chosen referral codes through `/partners`; `origins` is setting its own `allowedOrigins` through `PUT …/origins`; `accounts` is organization owners through `/accounts`.
     public var capabilities: PostAuthConnectionsIdPingResponseCapabilities
 
     enum CodingKeys: String, CodingKey {
@@ -16352,6 +17013,36 @@ public struct PostAuthConnectionsIdPingResponse: Codable, Sendable, Equatable {
         self.autoEnrollUsers = autoEnrollUsers
         self.serverTime = serverTime
         self.capabilities = capabilities
+    }
+}
+
+public struct PutAuthConnectionsIdOriginsResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var allowedOrigins: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case allowedOrigins = "allowedOrigins"
+    }
+
+    public init(id: String, allowedOrigins: [String]) {
+        self.id = id
+        self.allowedOrigins = allowedOrigins
+    }
+}
+
+public struct PatchAuthConnectionsIdOriginsResponse: Codable, Sendable, Equatable {
+    public var id: String
+    public var allowedOrigins: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case allowedOrigins = "allowedOrigins"
+    }
+
+    public init(id: String, allowedOrigins: [String]) {
+        self.id = id
+        self.allowedOrigins = allowedOrigins
     }
 }
 
@@ -16475,6 +17166,44 @@ public struct GetAuthConnectionsIdUsersCustomerRefReferralResponse: Codable, Sen
         self.code = code
         self.linkUrl = linkUrl
         self.enrolledAt = enrolledAt
+    }
+}
+
+public struct PostAuthConnectionsIdAccountsResponse: Codable, Sendable, Equatable {
+    public var ok: Bool
+    public var accountRef: String
+    /// Null after a deletion (or a rename of an account with no owner).
+    public var ownerCustomerRef: String?
+    public var previousOwnerCustomerRef: String?
+    public var changed: Bool
+    public var relinked: Int
+    public var reprocessedPayments: Int
+    /// The previous id, on a rename.
+    public var renamedFrom: String?
+    public var deleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ok = "ok"
+        case accountRef = "accountRef"
+        case ownerCustomerRef = "ownerCustomerRef"
+        case previousOwnerCustomerRef = "previousOwnerCustomerRef"
+        case changed = "changed"
+        case relinked = "relinked"
+        case reprocessedPayments = "reprocessedPayments"
+        case renamedFrom = "renamedFrom"
+        case deleted = "deleted"
+    }
+
+    public init(ok: Bool, accountRef: String, ownerCustomerRef: String? = nil, previousOwnerCustomerRef: String? = nil, changed: Bool, relinked: Int, reprocessedPayments: Int, renamedFrom: String? = nil, deleted: Bool) {
+        self.ok = ok
+        self.accountRef = accountRef
+        self.ownerCustomerRef = ownerCustomerRef
+        self.previousOwnerCustomerRef = previousOwnerCustomerRef
+        self.changed = changed
+        self.relinked = relinked
+        self.reprocessedPayments = reprocessedPayments
+        self.renamedFrom = renamedFrom
+        self.deleted = deleted
     }
 }
 
@@ -17132,6 +17861,8 @@ public struct GetPublicProgramsHandleResponse: Codable, Sendable, Equatable {
     public var pitch: String
     public var autoApprove: Bool
     public var commission: GetOpenapiJsonResponse?
+    /// The program's terms (as `GET /v1/programs/{id}/terms`, with `?locale=`/`Accept-Language`); null when it has no rule yet.
+    public var terms: ProgramTerms?
     public var branding: GetPublicProgramsHandleResponseBranding
 
     enum CodingKeys: String, CodingKey {
@@ -17145,10 +17876,11 @@ public struct GetPublicProgramsHandleResponse: Codable, Sendable, Equatable {
         case pitch = "pitch"
         case autoApprove = "autoApprove"
         case commission = "commission"
+        case terms = "terms"
         case branding = "branding"
     }
 
-    public init(handle: String, programId: String, programName: String, merchant: String, trackingToken: String, cookieWindowDays: Int, termsMd: String, pitch: String, autoApprove: Bool, commission: GetOpenapiJsonResponse? = nil, branding: GetPublicProgramsHandleResponseBranding) {
+    public init(handle: String, programId: String, programName: String, merchant: String, trackingToken: String, cookieWindowDays: Int, termsMd: String, pitch: String, autoApprove: Bool, commission: GetOpenapiJsonResponse? = nil, terms: ProgramTerms? = nil, branding: GetPublicProgramsHandleResponseBranding) {
         self.handle = handle
         self.programId = programId
         self.programName = programName
@@ -17159,6 +17891,7 @@ public struct GetPublicProgramsHandleResponse: Codable, Sendable, Equatable {
         self.pitch = pitch
         self.autoApprove = autoApprove
         self.commission = commission
+        self.terms = terms
         self.branding = branding
     }
 }
@@ -22708,44 +23441,16 @@ public struct GetProgramsIdCreditRailLogResponse: Codable, Sendable, Equatable {
     }
 }
 
-public struct PostWebhooksBillingConnectionIdResponseResultsItem: Codable, Sendable, Equatable {
-    public var duplicate: Bool
-    public var billingEventId: String?
-    public var conversions: Int
-    public var linesCreated: Int
-    public var reversals: Int
-    /// Recorded as ignored_by_filter: earned nothing.
-    public var ignored: String?
-
-    enum CodingKeys: String, CodingKey {
-        case duplicate = "duplicate"
-        case billingEventId = "billingEventId"
-        case conversions = "conversions"
-        case linesCreated = "linesCreated"
-        case reversals = "reversals"
-        case ignored = "ignored"
-    }
-
-    public init(duplicate: Bool, billingEventId: String? = nil, conversions: Int, linesCreated: Int, reversals: Int, ignored: String? = nil) {
-        self.duplicate = duplicate
-        self.billingEventId = billingEventId
-        self.conversions = conversions
-        self.linesCreated = linesCreated
-        self.reversals = reversals
-        self.ignored = ignored
-    }
-}
-
 public struct PostWebhooksBillingConnectionIdResponse: Codable, Sendable, Equatable {
     public var received: Int
-    public var results: [PostWebhooksBillingConnectionIdResponseResultsItem]
+    public var results: [PostBillingEventsIdReleaseResponse]
 
     enum CodingKeys: String, CodingKey {
         case received = "received"
         case results = "results"
     }
 
-    public init(received: Int, results: [PostWebhooksBillingConnectionIdResponseResultsItem]) {
+    public init(received: Int, results: [PostBillingEventsIdReleaseResponse]) {
         self.received = received
         self.results = results
     }
@@ -23901,6 +24606,7 @@ public struct PostProgramsBody: Codable, Sendable, Equatable {
     public var allowPaidSearch: Bool?
     public var challengeLinks: Bool?
     public var settlement: String?
+    public var signupPaymentGraceMinutes: Int?
     public var riskPolicy: PostProgramsBodyRiskPolicy?
     public var widget: PostProgramsBodyWidget?
     public var mobileApp: PostProgramsBodyMobileAppOption1?
@@ -23922,12 +24628,13 @@ public struct PostProgramsBody: Codable, Sendable, Equatable {
         case allowPaidSearch = "allowPaidSearch"
         case challengeLinks = "challengeLinks"
         case settlement = "settlement"
+        case signupPaymentGraceMinutes = "signupPaymentGraceMinutes"
         case riskPolicy = "riskPolicy"
         case widget = "widget"
         case mobileApp = "mobileApp"
     }
 
-    public init(name: String, slug: String, attributionModel: String? = nil, cookieWindowDays: Int? = nil, signupToConversionDays: Int? = nil, termsMd: String? = nil, status: String? = nil, publicHandle: String? = nil, publicPage: PostProgramsBodyPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, riskPolicy: PostProgramsBodyRiskPolicy? = nil, widget: PostProgramsBodyWidget? = nil, mobileApp: PostProgramsBodyMobileAppOption1? = nil) {
+    public init(name: String, slug: String, attributionModel: String? = nil, cookieWindowDays: Int? = nil, signupToConversionDays: Int? = nil, termsMd: String? = nil, status: String? = nil, publicHandle: String? = nil, publicPage: PostProgramsBodyPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, signupPaymentGraceMinutes: Int? = nil, riskPolicy: PostProgramsBodyRiskPolicy? = nil, widget: PostProgramsBodyWidget? = nil, mobileApp: PostProgramsBodyMobileAppOption1? = nil) {
         self.name = name
         self.slug = slug
         self.attributionModel = attributionModel
@@ -23944,6 +24651,7 @@ public struct PostProgramsBody: Codable, Sendable, Equatable {
         self.allowPaidSearch = allowPaidSearch
         self.challengeLinks = challengeLinks
         self.settlement = settlement
+        self.signupPaymentGraceMinutes = signupPaymentGraceMinutes
         self.riskPolicy = riskPolicy
         self.widget = widget
         self.mobileApp = mobileApp
@@ -24170,6 +24878,7 @@ public struct PatchProgramsIdBodySettings: Codable, Sendable, Equatable {
     public var allowPaidSearch: Bool?
     public var challengeLinks: Bool?
     public var settlement: String?
+    public var signupPaymentGraceMinutes: Int?
     public var riskPolicy: PatchProgramsIdBodySettingsRiskPolicy?
     public var widget: PatchProgramsIdBodySettingsWidget?
     public var mobileApp: PatchProgramsIdBodySettingsMobileAppOption1?
@@ -24184,12 +24893,13 @@ public struct PatchProgramsIdBodySettings: Codable, Sendable, Equatable {
         case allowPaidSearch = "allowPaidSearch"
         case challengeLinks = "challengeLinks"
         case settlement = "settlement"
+        case signupPaymentGraceMinutes = "signupPaymentGraceMinutes"
         case riskPolicy = "riskPolicy"
         case widget = "widget"
         case mobileApp = "mobileApp"
     }
 
-    public init(publicHandle: String? = nil, publicPage: PatchProgramsIdBodySettingsPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, riskPolicy: PatchProgramsIdBodySettingsRiskPolicy? = nil, widget: PatchProgramsIdBodySettingsWidget? = nil, mobileApp: PatchProgramsIdBodySettingsMobileAppOption1? = nil) {
+    public init(publicHandle: String? = nil, publicPage: PatchProgramsIdBodySettingsPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, signupPaymentGraceMinutes: Int? = nil, riskPolicy: PatchProgramsIdBodySettingsRiskPolicy? = nil, widget: PatchProgramsIdBodySettingsWidget? = nil, mobileApp: PatchProgramsIdBodySettingsMobileAppOption1? = nil) {
         self.publicHandle = publicHandle
         self.publicPage = publicPage
         self.probabilisticPolicy = probabilisticPolicy
@@ -24199,6 +24909,7 @@ public struct PatchProgramsIdBodySettings: Codable, Sendable, Equatable {
         self.allowPaidSearch = allowPaidSearch
         self.challengeLinks = challengeLinks
         self.settlement = settlement
+        self.signupPaymentGraceMinutes = signupPaymentGraceMinutes
         self.riskPolicy = riskPolicy
         self.widget = widget
         self.mobileApp = mobileApp
@@ -24222,6 +24933,7 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
     public var allowPaidSearch: Bool?
     public var challengeLinks: Bool?
     public var settlement: String?
+    public var signupPaymentGraceMinutes: Int?
     public var riskPolicy: PatchProgramsIdBodyRiskPolicy?
     public var widget: PatchProgramsIdBodyWidget?
     public var mobileApp: PatchProgramsIdBodyMobileAppOption1?
@@ -24245,6 +24957,7 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
         case allowPaidSearch = "allowPaidSearch"
         case challengeLinks = "challengeLinks"
         case settlement = "settlement"
+        case signupPaymentGraceMinutes = "signupPaymentGraceMinutes"
         case riskPolicy = "riskPolicy"
         case widget = "widget"
         case mobileApp = "mobileApp"
@@ -24252,7 +24965,7 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
         case destinationUrl = "destinationUrl"
     }
 
-    public init(name: String? = nil, slug: String? = nil, attributionModel: String? = nil, cookieWindowDays: Int? = nil, signupToConversionDays: Int? = nil, termsMd: String? = nil, status: String? = nil, publicHandle: String? = nil, publicPage: PatchProgramsIdBodyPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, riskPolicy: PatchProgramsIdBodyRiskPolicy? = nil, widget: PatchProgramsIdBodyWidget? = nil, mobileApp: PatchProgramsIdBodyMobileAppOption1? = nil, settings: PatchProgramsIdBodySettings? = nil, destinationUrl: String? = nil) {
+    public init(name: String? = nil, slug: String? = nil, attributionModel: String? = nil, cookieWindowDays: Int? = nil, signupToConversionDays: Int? = nil, termsMd: String? = nil, status: String? = nil, publicHandle: String? = nil, publicPage: PatchProgramsIdBodyPublicPage? = nil, probabilisticPolicy: String? = nil, selfReferralPolicy: String? = nil, splitCommissions: Bool? = nil, utmTemplate: [String: String]? = nil, allowPaidSearch: Bool? = nil, challengeLinks: Bool? = nil, settlement: String? = nil, signupPaymentGraceMinutes: Int? = nil, riskPolicy: PatchProgramsIdBodyRiskPolicy? = nil, widget: PatchProgramsIdBodyWidget? = nil, mobileApp: PatchProgramsIdBodyMobileAppOption1? = nil, settings: PatchProgramsIdBodySettings? = nil, destinationUrl: String? = nil) {
         self.name = name
         self.slug = slug
         self.attributionModel = attributionModel
@@ -24269,6 +24982,7 @@ public struct PatchProgramsIdBody: Codable, Sendable, Equatable {
         self.allowPaidSearch = allowPaidSearch
         self.challengeLinks = challengeLinks
         self.settlement = settlement
+        self.signupPaymentGraceMinutes = signupPaymentGraceMinutes
         self.riskPolicy = riskPolicy
         self.widget = widget
         self.mobileApp = mobileApp
@@ -24403,6 +25117,7 @@ public struct PostApiKeysBody: Codable, Sendable, Equatable {
     public var mode: String?
     public var owner: String?
     public var expiresInDays: Int?
+    public var expiresAt: String?
     public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
@@ -24414,10 +25129,11 @@ public struct PostApiKeysBody: Codable, Sendable, Equatable {
         case mode = "mode"
         case owner = "owner"
         case expiresInDays = "expiresInDays"
+        case expiresAt = "expiresAt"
         case programIds = "programIds"
     }
 
-    public init(name: String, scopes: [String]? = nil, publishable: Bool? = nil, allowedOrigins: [String]? = nil, apiVersion: String? = nil, mode: String? = nil, owner: String? = nil, expiresInDays: Int? = nil, programIds: [String]? = nil) {
+    public init(name: String, scopes: [String]? = nil, publishable: Bool? = nil, allowedOrigins: [String]? = nil, apiVersion: String? = nil, mode: String? = nil, owner: String? = nil, expiresInDays: Int? = nil, expiresAt: String? = nil, programIds: [String]? = nil) {
         self.name = name
         self.scopes = scopes
         self.publishable = publishable
@@ -24426,27 +25142,37 @@ public struct PostApiKeysBody: Codable, Sendable, Equatable {
         self.mode = mode
         self.owner = owner
         self.expiresInDays = expiresInDays
+        self.expiresAt = expiresAt
         self.programIds = programIds
     }
 }
 
 public struct PatchApiKeysIdBody: Codable, Sendable, Equatable {
+    public var name: String?
+    public var scopes: [String]?
     public var apiVersion: String?
     public var owner: String?
     public var expiresInDays: Int?
+    public var expiresAt: String?
     public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
+        case name = "name"
+        case scopes = "scopes"
         case apiVersion = "apiVersion"
         case owner = "owner"
         case expiresInDays = "expiresInDays"
+        case expiresAt = "expiresAt"
         case programIds = "programIds"
     }
 
-    public init(apiVersion: String? = nil, owner: String? = nil, expiresInDays: Int? = nil, programIds: [String]? = nil) {
+    public init(name: String? = nil, scopes: [String]? = nil, apiVersion: String? = nil, owner: String? = nil, expiresInDays: Int? = nil, expiresAt: String? = nil, programIds: [String]? = nil) {
+        self.name = name
+        self.scopes = scopes
         self.apiVersion = apiVersion
         self.owner = owner
         self.expiresInDays = expiresInDays
+        self.expiresAt = expiresAt
         self.programIds = programIds
     }
 }
@@ -24661,6 +25387,7 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
     public var anonId: String?
     public var referralToken: String?
     public var couponCode: String?
+    public var handoffToken: String?
     public var emailHash: String?
     public var ip: String?
     public var ua: String?
@@ -24675,6 +25402,7 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
         case anonId = "anonId"
         case referralToken = "referralToken"
         case couponCode = "couponCode"
+        case handoffToken = "handoffToken"
         case emailHash = "emailHash"
         case ip = "ip"
         case ua = "ua"
@@ -24684,12 +25412,13 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
         case consent = "consent"
     }
 
-    public init(programId: String, customerRef: String, anonId: String? = nil, referralToken: String? = nil, couponCode: String? = nil, emailHash: String? = nil, ip: String? = nil, ua: String? = nil, idempotencyKey: String? = nil, occurredAt: String? = nil, emailDomain: String? = nil, consent: PostReferralsAssociateBodyConsent? = nil) {
+    public init(programId: String, customerRef: String, anonId: String? = nil, referralToken: String? = nil, couponCode: String? = nil, handoffToken: String? = nil, emailHash: String? = nil, ip: String? = nil, ua: String? = nil, idempotencyKey: String? = nil, occurredAt: String? = nil, emailDomain: String? = nil, consent: PostReferralsAssociateBodyConsent? = nil) {
         self.programId = programId
         self.customerRef = customerRef
         self.anonId = anonId
         self.referralToken = referralToken
         self.couponCode = couponCode
+        self.handoffToken = handoffToken
         self.emailHash = emailHash
         self.ip = ip
         self.ua = ua
@@ -24697,6 +25426,25 @@ public struct PostReferralsAssociateBody: Codable, Sendable, Equatable {
         self.occurredAt = occurredAt
         self.emailDomain = emailDomain
         self.consent = consent
+    }
+}
+
+public struct PostReferralsHandoffTokensBody: Codable, Sendable, Equatable {
+    public var anonId: String?
+    public var clickId: String?
+    /// The referral (link or coupon) code from the landing URL.
+    public var code: String?
+
+    enum CodingKeys: String, CodingKey {
+        case anonId = "anonId"
+        case clickId = "clickId"
+        case code = "code"
+    }
+
+    public init(anonId: String? = nil, clickId: String? = nil, code: String? = nil) {
+        self.anonId = anonId
+        self.clickId = clickId
+        self.code = code
     }
 }
 
@@ -25351,6 +26099,7 @@ public struct PatchBillingConnectionsIdBody: Codable, Sendable, Equatable {
     public var filter: PatchBillingConnectionsIdBodyFilterOption1?
     public var customerRefMetadataKey: String?
     public var programIds: [String]?
+    public var maxAmountMinor: Int?
 
     enum CodingKeys: String, CodingKey {
         case status = "status"
@@ -25358,14 +26107,43 @@ public struct PatchBillingConnectionsIdBody: Codable, Sendable, Equatable {
         case filter = "filter"
         case customerRefMetadataKey = "customerRefMetadataKey"
         case programIds = "programIds"
+        case maxAmountMinor = "maxAmountMinor"
     }
 
-    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil) {
+    public init(status: String? = nil, name: String? = nil, filter: PatchBillingConnectionsIdBodyFilterOption1? = nil, customerRefMetadataKey: String? = nil, programIds: [String]? = nil, maxAmountMinor: Int? = nil) {
         self.status = status
         self.name = name
         self.filter = filter
         self.customerRefMetadataKey = customerRefMetadataKey
         self.programIds = programIds
+        self.maxAmountMinor = maxAmountMinor
+    }
+}
+
+public struct PostBillingConnectionsIdEventsBody: Codable, Sendable, Equatable {
+    public var events: [[String: JSONValue]]
+
+    enum CodingKeys: String, CodingKey {
+        case events = "events"
+    }
+
+    public init(events: [[String: JSONValue]]) {
+        self.events = events
+    }
+}
+
+public struct PutBillingAccountsAccountRefOwnerBody: Codable, Sendable, Equatable {
+    public var ownerCustomerRef: String?
+    public var previousAccountRef: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ownerCustomerRef = "ownerCustomerRef"
+        case previousAccountRef = "previousAccountRef"
+    }
+
+    public init(ownerCustomerRef: String? = nil, previousAccountRef: String? = nil) {
+        self.ownerCustomerRef = ownerCustomerRef
+        self.previousAccountRef = previousAccountRef
     }
 }
 
@@ -26098,10 +26876,16 @@ public struct PatchWebhookEndpointsIdBody: Codable, Sendable, Equatable {
 
 public struct PostSandboxSimulateBody: Codable, Sendable, Equatable {
     public var programId: String
-    public var partnerId: String
+    public var partnerId: String?
     public var scenario: String?
     public var priceMinor: Int?
     public var months: Int?
+    public var code: String?
+    public var authConnectionId: String?
+    public var billingConnectionId: String?
+    public var customerRef: String?
+    public var amountMinor: Int?
+    public var currency: String?
 
     enum CodingKeys: String, CodingKey {
         case programId = "programId"
@@ -26109,14 +26893,26 @@ public struct PostSandboxSimulateBody: Codable, Sendable, Equatable {
         case scenario = "scenario"
         case priceMinor = "priceMinor"
         case months = "months"
+        case code = "code"
+        case authConnectionId = "authConnectionId"
+        case billingConnectionId = "billingConnectionId"
+        case customerRef = "customerRef"
+        case amountMinor = "amountMinor"
+        case currency = "currency"
     }
 
-    public init(programId: String, partnerId: String, scenario: String? = nil, priceMinor: Int? = nil, months: Int? = nil) {
+    public init(programId: String, partnerId: String? = nil, scenario: String? = nil, priceMinor: Int? = nil, months: Int? = nil, code: String? = nil, authConnectionId: String? = nil, billingConnectionId: String? = nil, customerRef: String? = nil, amountMinor: Int? = nil, currency: String? = nil) {
         self.programId = programId
         self.partnerId = partnerId
         self.scenario = scenario
         self.priceMinor = priceMinor
         self.months = months
+        self.code = code
+        self.authConnectionId = authConnectionId
+        self.billingConnectionId = billingConnectionId
+        self.customerRef = customerRef
+        self.amountMinor = amountMinor
+        self.currency = currency
     }
 }
 
@@ -27670,18 +28466,6 @@ public struct PostAuthConnectionsBody: Codable, Sendable, Equatable {
     }
 }
 
-public struct PutAuthConnectionsIdSecretBody: Codable, Sendable, Equatable {
-    public var secret: String
-
-    enum CodingKeys: String, CodingKey {
-        case secret = "secret"
-    }
-
-    public init(secret: String) {
-        self.secret = secret
-    }
-}
-
 public struct PatchAuthConnectionsIdBodyTokenVerificationOption1Claims: Codable, Sendable, Equatable {
     public var customerRef: String?
     public var email: String?
@@ -27772,6 +28556,18 @@ public struct PatchAuthConnectionsIdBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutAuthConnectionsIdSecretBody: Codable, Sendable, Equatable {
+    public var secret: String
+
+    enum CodingKeys: String, CodingKey {
+        case secret = "secret"
+    }
+
+    public init(secret: String) {
+        self.secret = secret
+    }
+}
+
 public struct PostAuthConnectionsIdSignupsBodyReferral: Codable, Sendable, Equatable {
     public var code: String?
     public var clickId: String?
@@ -27797,12 +28593,14 @@ public struct PostAuthConnectionsIdSignupsBodyReferral: Codable, Sendable, Equat
 }
 
 public struct PostAuthConnectionsIdSignupsBodyRisk: Codable, Sendable, Equatable {
+    /// 0 (human) to 1 (certainly a bot). A value above 1 and up to 100 is read as a percentage (85 → 0.85); above 100 is refused.
     public var botScore: Double?
     public var disposableEmail: Bool?
     public var emailVerified: Bool?
     public var selfReferral: Bool?
     public var velocity: Int?
     public var reasons: [String]?
+    /// Overall risk, 0 (safe) to 1 (certainly fraudulent), compared with riskPolicy.holdRiskScore (default 0.8). A value above 1 and up to 100 (Atlas’s 0–100 scale) is read as a percentage (85 → 0.85); above 100 is refused.
     public var score: Double?
     public var level: String?
     public var dropped: Bool?
@@ -27916,6 +28714,30 @@ public struct PostAuthConnectionsIdEraseBody: Codable, Sendable, Equatable {
     }
 }
 
+public struct PutAuthConnectionsIdOriginsBody: Codable, Sendable, Equatable {
+    public var allowedOrigins: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case allowedOrigins = "allowedOrigins"
+    }
+
+    public init(allowedOrigins: [String]) {
+        self.allowedOrigins = allowedOrigins
+    }
+}
+
+public struct PatchAuthConnectionsIdOriginsBody: Codable, Sendable, Equatable {
+    public var allowedOrigins: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case allowedOrigins = "allowedOrigins"
+    }
+
+    public init(allowedOrigins: [String]) {
+        self.allowedOrigins = allowedOrigins
+    }
+}
+
 public struct PostAuthConnectionsIdAliasesBody: Codable, Sendable, Equatable {
     public var fromCustomerRef: String
     public var toCustomerRef: String
@@ -27976,6 +28798,27 @@ public struct PostAuthConnectionsIdWidgetTokensBody: Codable, Sendable, Equatabl
         self.emailVerified = emailVerified
         self.displayName = displayName
         self.ttlSeconds = ttlSeconds
+    }
+}
+
+public struct PostAuthConnectionsIdAccountsBody: Codable, Sendable, Equatable {
+    public var accountRef: String
+    public var ownerCustomerRef: String?
+    public var previousAccountRef: String?
+    public var deleted: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case accountRef = "accountRef"
+        case ownerCustomerRef = "ownerCustomerRef"
+        case previousAccountRef = "previousAccountRef"
+        case deleted = "deleted"
+    }
+
+    public init(accountRef: String, ownerCustomerRef: String? = nil, previousAccountRef: String? = nil, deleted: Bool? = nil) {
+        self.accountRef = accountRef
+        self.ownerCustomerRef = ownerCustomerRef
+        self.previousAccountRef = previousAccountRef
+        self.deleted = deleted
     }
 }
 
@@ -28491,6 +29334,8 @@ public struct PostOrgsOrgIdPrivacyExecutorKeyBody: Codable, Sendable, Equatable 
     /// Never reused; a seen nonce is refused.
     public var nonce: String?
     public var iat: Int?
+    /// Limit the key to these programs of the org: it then answers only for people in them. Without it, the key reaches the whole org. Each set of programs has its own key, so minting one leaves the others working.
+    public var programIds: [String]?
 
     enum CodingKeys: String, CodingKey {
         case cbid = "cbid"
@@ -28500,9 +29345,10 @@ public struct PostOrgsOrgIdPrivacyExecutorKeyBody: Codable, Sendable, Equatable 
         case orgId = "orgId"
         case nonce = "nonce"
         case iat = "iat"
+        case programIds = "programIds"
     }
 
-    public init(cbid: String? = nil, linkId: String? = nil, partner: String? = nil, externalId: String? = nil, orgId: String? = nil, nonce: String? = nil, iat: Int? = nil) {
+    public init(cbid: String? = nil, linkId: String? = nil, partner: String? = nil, externalId: String? = nil, orgId: String? = nil, nonce: String? = nil, iat: Int? = nil, programIds: [String]? = nil) {
         self.cbid = cbid
         self.linkId = linkId
         self.partner = partner
@@ -28510,6 +29356,7 @@ public struct PostOrgsOrgIdPrivacyExecutorKeyBody: Codable, Sendable, Equatable 
         self.orgId = orgId
         self.nonce = nonce
         self.iat = iat
+        self.programIds = programIds
     }
 }
 
